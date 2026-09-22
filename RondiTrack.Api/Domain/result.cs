@@ -7,7 +7,7 @@ public enum ErrorType
     Conflict, // the values sent are valid but conflict with existing data -> 409
 }
 
-public sealed recor Error(ErrorType Type, string Code, string Message);
+public sealed record Error(ErrorType Type, string Code, string Message);
 
 public class Result{
     private readonly Error? _error;
