@@ -1,25 +1,24 @@
+using RondiTrack.Api.Data;
 using Scalar.AspNetCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton<IUserRepository, InMemoryUserRepository>();
+builder.Services.AddSingleton<IStokvelRepository, InMemoryStokvelRepository>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+await SeedData.ApplyAsync(app.Services);
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();   // serves /openapi/v1.json
-    app.MapScalarApiReference();   // serves the scalar UI (/scalar/v1)
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
-
-app.UseAuthorization();
-
-app.MapControllers(); // Register every ApiController route
+app.MapControllers();
 
 app.Run();
