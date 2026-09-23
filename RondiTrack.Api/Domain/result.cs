@@ -5,7 +5,9 @@ public enum ErrorType
     Validation, // the values sent are invalid on their own  -> 400
     NotFound, // the values sent are valid but do not exist in the system -> 404
     Conflict, // the values sent are valid but conflict with existing data -> 409
+     Unprocessable   // well-formed request refers to something missing  -> 422
 }
+
 
 public sealed record Error(ErrorType Type, string Code, string Message);
 

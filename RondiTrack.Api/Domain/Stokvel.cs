@@ -20,6 +20,11 @@ public sealed class Stokvel
     public DateTimeOffset CreatedAt { get; }
     public IReadOnlyList<Membership> Members { get { lock (_sync) { return _members.ToArray(); } } }
 
+    public int MemberCount
+{
+    get { lock (_sync) { return _members.Count; } }
+}
+
     public static Result<Stokvel> Create(string? name, decimal amount, ContributionFrequency freq, int max)
     {
         var error = Validate(name, amount, freq, max);
