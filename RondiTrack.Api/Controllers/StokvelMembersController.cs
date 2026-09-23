@@ -1,52 +1,42 @@
 using Microsoft.AspNetCore.Mvc;
+using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Data;
-using RondiTrack.Api.Domain;
+using RondiTrack.Api.Services;
 namespace RondiTrack.Api.Controllers;
-
 [ApiController]
 [Route("api/stokvels/{stokvelId:guid}/members")]
-public class StokvelMembersController(IStokvelRepository stokvels, IUserRepository users) : ApiControllerBase
+public class StokvelMembersController(IStokvelRepository stokvels, IMembershipService membershipService)
+    : ApiControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<Membership>>> GetAll(Guid stokvelId, CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<MembershipResponse>>> GetAll(Guid stokvelId, CancellationToken ct)
     {
         var stokvel = await stokvels.GetByIdAsync(stokvelId, ct);
-        return stokvel is null ? NotFound() : Ok(stokvel.Members);
+        if (stokvel is null) return NotFoundProblem("stokvel.not_found", $"No stokvel with id {stokvelId} exists.");
+        return Ok(stokvel.Members.Select(MembershipResponse.FromEntity).ToList());
     }
-
     [HttpGet("{userId:guid}")]
-    public async Task<ActionResult<Membership>> GetById(Guid stokvelId, Guid userId, CancellationToken ct)
+    public async Task<ActionResult<MembershipResponse>> GetById(Guid stokvelId, Guid userId, CancellationToken ct)
     {
         var stokvel = await stokvels.GetByIdAsync(stokvelId, ct);
-        if (stokvel is null) return NotFound();
+        if (stokvel is null) return NotFoundProblem("stokvel.not_found", $"No stokvel with id {stokvelId} exists.");
         var membership = stokvel.GetMember(userId);
-        return membership is null ? NotFound() : Ok(membership);
+        return membership is null
+            ? NotFoundProblem("membership.not_found", "This user is not a member of this stokvel.")
+            : Ok(MembershipResponse.FromEntity(membership));
     }
-
     [HttpPost]
-    public async Task<ActionResult<Membership>> Add(Guid stokvelId, AddMemberRequest request, CancellationToken ct)
+    public async Task<ActionResult<MembershipResponse>> Add(Guid stokvelId, AddMemberRequest request, CancellationToken ct)
     {
-        var stokvel = await stokvels.GetByIdAsync(stokvelId, ct);
-        if (stokvel is null) return NotFound();
-
-        if (!await users.ExistsAsync(request.UserId, ct))
-            return Problem(title: "membership.user_not_found", detail: "No such user.", statusCode: 422);
-
-        var result = stokvel.AddMember(request.UserId);
+        var result = await membershipService.AddMemberAsync(stokvelId, request.UserId, ct);
         if (!result.IsSuccess) return ToProblem(result.Error);
-
-        var membership = stokvel.GetMember(request.UserId)!;
-        return CreatedAtAction(nameof(GetById), new { stokvelId, userId = request.UserId }, membership);
+        var response = MembershipResponse.FromEntity(result.Value);
+        return CreatedAtAction(nameof(GetById), new { stokvelId, userId = response.UserId }, response);
     }
-
     [HttpDelete("{userId:guid}")]
     public async Task<IActionResult> Remove(Guid stokvelId, Guid userId, CancellationToken ct)
     {
-        var stokvel = await stokvels.GetByIdAsync(stokvelId, ct);
-        if (stokvel is null) return NotFound();
-        var result = stokvel.RemoveMember(userId);
+        var result = await membershipService.RemoveMemberAsync(stokvelId, userId, ct);
         return !result.IsSuccess ? ToProblem(result.Error) : NoContent();
     }
 }
-
-public sealed record AddMemberRequest(Guid UserId);
