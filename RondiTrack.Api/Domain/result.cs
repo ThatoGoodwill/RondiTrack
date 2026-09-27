@@ -34,3 +34,24 @@ public sealed class Result<T> : Result
     public static Result<T> Success(T value) => new Result<T>(value, null);
     public static new Result<T> Failure(Error error) => new Result<T>(default, error);
 }
+
+public static class ResultExtensions
+{
+    // Turns a domain Error into the matching exception TYPE, using the same
+    // ErrorType categories your entities and services already produce.
+    public static RondiTrackException ToException(this Error error) => error.Type switch
+    {
+        ErrorType.NotFound      => new NotFoundException(error.Code, error.Message),
+        ErrorType.Conflict      => new ConflictException(error.Code, error.Message),
+        ErrorType.Unprocessable => new UnprocessableException(error.Code, error.Message),
+        ErrorType.Validation    => new ValidationFailedException(error.Code, error.Message),
+        _ => new ValidationFailedException(error.Code, error.Message)
+    };
+}
+    // The ONE call site every controller/service uses instead of "if (!result.IsSuccess) return ...".
+    public static T ThrowIfFailure<T>(this Result<T> result) =>
+        result.IsSuccess ? result.Value : throw result.Error.ToException();
+    public static void ThrowIfFailure(this Result result)
+    {
+        if (!result.IsSuccess) throw result.Error.ToException();
+    }   
