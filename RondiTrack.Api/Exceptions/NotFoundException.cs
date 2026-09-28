@@ -1,5 +1,10 @@
 namespace RondiTrack.Api.Exceptions;
 
-     // The resource the URL itself is ABOUT does not exist. -> 404
-        public class NotFoundException(string code, string message) : RondiTrackException(code, message);
-     
+// ---------------------------------------------------------------------------------
+// The thing the request is ABOUT does not exist.        --> handler answers 404
+// Example: GET /api/users/{id} where no user has that id.
+// ---------------------------------------------------------------------------------
+public class NotFoundException : RondiTrackException
+{
+    public NotFoundException(string code, string message) : base(code, message) { }
+}
