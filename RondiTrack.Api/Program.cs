@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Data;
 using RondiTrack.Api.Exceptions;
+using RondiTrack.Api.OpenApi;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Validators;
 using Scalar.AspNetCore;
@@ -20,7 +21,11 @@ builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelS
 // Finds and registers EVERY AbstractValidator<T> in this project automatically.
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-builder.Services.AddOpenApi();
+// OpenAPI, with our custom example transformer (4.4) attaching realistic sample bodies.
+builder.Services.AddOpenApi(options =>
+{
+    options.AddOperationTransformer<ExampleOperationTransformer>();
+});
 
 // Repositories + idempotency store. Singleton = ONE store for the whole life of the app,
 // otherwise data would vanish between requests.
@@ -36,7 +41,6 @@ builder.Services.AddSingleton<IMembershipService, MembershipService>();
 builder.Services.AddSingleton<IContributionService, ContributionService>();
 
 // ---- Centralized error handling ----
-// Our handler turns every exception into problem+json.
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 
 // ProblemDetails support for everything ELSE (e.g. unknown routes like /api/users/banana),

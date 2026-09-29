@@ -1,0 +1,6 @@
+using RondiTrack.Api.Domain;
+
+namespace RondiTrack.Api.Contracts;
+
+// INCOMING shape for creating/replacing a stokvel.
+public sealed record StokvelRequest(string? Name, decimal ContributionAmount, ContributionFrequency Frequency, int MaxMembers);

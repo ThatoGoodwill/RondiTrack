@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Data;
@@ -6,21 +7,18 @@ using RondiTrack.Api.Exceptions;
 
 namespace RondiTrack.Api.Controllers;
 
-// ---------------------------------------------------------------------------------
-// NEW IN 4.3. Plain CRUD, NO SERVICE, on purpose:
-//   - Creating a cycle needs exactly ONE existence check (does the stokvel exist?),
-//     a single repository lookup with no further decision attached.
-//   - That is not the multi-step, cross-entity judgement call that earns a service
-//     (compare MembershipService / ContributionService).
-// Protected by: validation (shape) + the exception hierarchy (not found) + the entity.
-// ---------------------------------------------------------------------------------
+// Plain CRUD, NO SERVICE, on purpose: creating a cycle needs exactly one existence check
+// (does the stokvel exist?), a single repository lookup with no further decision attached.
 [ApiController]
 [Route("api/stokvels/{stokvelId:guid}/cycles")]
 public class ContributionCyclesController(
     IStokvelRepository stokvels, IContributionCycleRepository cycles) : ApiControllerBase
 {
-    // GET /api/stokvels/{stokvelId}/cycles
     [HttpGet]
+    [EndpointSummary("List a stokvel's contribution cycles")]
+    [EndpointDescription("Returns every contribution cycle defined for this stokvel.")]
+    [ProducesResponseType<List<ContributionCycleResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<ContributionCycleResponse>>> GetAll(Guid stokvelId, CancellationToken ct)
     {
         await EnsureStokvelExists(stokvelId, ct);
@@ -28,16 +26,23 @@ public class ContributionCyclesController(
         return Ok(list.Select(ContributionCycleResponse.FromEntity).ToList());
     }
 
-    // GET /api/stokvels/{stokvelId}/cycles/{id}
     [HttpGet("{id:guid}")]
+    [EndpointSummary("Get one contribution cycle")]
+    [EndpointDescription("Returns one contribution cycle. 404 if it does not exist for this stokvel.")]
+    [ProducesResponseType<ContributionCycleResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ContributionCycleResponse>> GetById(Guid stokvelId, Guid id, CancellationToken ct)
     {
         var cycle = await GetCycleOrThrow(stokvelId, id, ct);
         return Ok(ContributionCycleResponse.FromEntity(cycle));
     }
 
-    // POST /api/stokvels/{stokvelId}/cycles   -> 201, or 400 / 404
     [HttpPost]
+    [EndpointSummary("Create a contribution cycle")]
+    [EndpointDescription("Defines a new collection period for this stokvel, e.g. \"2026-09\" with a target amount.")]
+    [ProducesResponseType<ContributionCycleResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ContributionCycleResponse>> Create(
         Guid stokvelId, ContributionCycleRequest request, CancellationToken ct)
     {
@@ -50,8 +55,12 @@ public class ContributionCyclesController(
         return CreatedAtAction(nameof(GetById), new { stokvelId, id = response.Id }, response);
     }
 
-    // PUT /api/stokvels/{stokvelId}/cycles/{id}   -> 200, or 400 / 404
     [HttpPut("{id:guid}")]
+    [EndpointSummary("Replace a contribution cycle")]
+    [EndpointDescription("Replaces a cycle's label and target amount.")]
+    [ProducesResponseType<ContributionCycleResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ContributionCycleResponse>> Replace(
         Guid stokvelId, Guid id, ContributionCycleRequest request, CancellationToken ct)
     {
@@ -60,16 +69,18 @@ public class ContributionCyclesController(
         return Ok(ContributionCycleResponse.FromEntity(cycle));
     }
 
-    // DELETE /api/stokvels/{stokvelId}/cycles/{id}   -> 204, or 404
     [HttpDelete("{id:guid}")]
+    [EndpointSummary("Delete a contribution cycle")]
+    [EndpointDescription("Deletes a contribution cycle.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid stokvelId, Guid id, CancellationToken ct)
     {
-        await GetCycleOrThrow(stokvelId, id, ct);   // 404 if missing or belongs to another stokvel
+        await GetCycleOrThrow(stokvelId, id, ct);
         await cycles.DeleteAsync(id, ct);
         return NoContent();
     }
 
-    // ---- tiny private helpers: each throws instead of returning an error response ----
     private async Task EnsureStokvelExists(Guid stokvelId, CancellationToken ct)
     {
         _ = await stokvels.GetByIdAsync(stokvelId, ct)

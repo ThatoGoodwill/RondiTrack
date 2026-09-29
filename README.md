@@ -59,3 +59,42 @@ against the rest of the system.
 Every failure, including every 4.1 endpoint, now returns a full Problem Details body via
 ToProblem or NotFoundProblem on ApiControllerBase. No endpoint returns a bare, empty 404
 or 400 anymore
+
+## ## Assignment 4.3: Validation & Centralized Error Handling
+
+### Exception hierarchy and reasoning
+`RondiTrackException` (abstract, carries a `Code`) is the base. Its children:
+- `NotFoundException` -> 404: the resource the URL is about does not exist.
+- `ConflictException` -> 409: valid request, but current state forbids it (duplicate member, full stokvel, email taken, contribution already recorded).
+- `UnprocessableException` -> 422: well-formed request that points at something missing (unknown user id in the body, user not a member, cycle not found).
+- `ValidationFailedException` -> 400: a safety net behind FluentValidation (entity rejections, unreadable/missing bodies).
+- `IdempotencyKeyConflictException` extends `ConflictException` -> 409.
+
+**How I classified the idempotency-key conflict:** a duplicate contribution and a reused Idempotency-Key are different kinds of failure. A duplicate contribution is a business-state conflict ("already paid"); a reused key is a protocol misuse (the key belongs to a different request). Both resolve to 409, so I made the idempotency case a *subtype* of `ConflictException`: the handler's single `ConflictException` case maps it to 409 automatically, while the distinction stays visible in code.
+
+### Validation vs exception
+- **Validation (FluentValidation, shape only):** blank names, non-positive or over-precise amounts, out-of-range member counts, invalid enum values, empty GUIDs, malformed email. No validator touches a repository.
+- **Exception (thrown from the service/controller):** anything that needs to ask a repository first: does the stokvel/user/cycle exist, is the email already taken, is the user already a member, is the stokvel full, has this cycle already been paid, was this key already used with a different body.
+- Rule of thumb: validation answers "is this well-formed?"; exceptions answer "is this allowed right now?".
+
+### ContributionCycle: did it need a service?
+No. Creating a cycle needs exactly one existence check (does the parent stokvel exist), a single repository lookup with no decision attached. It is not a multi-step, cross-entity judgement call like adding a member or recording a contribution. The controller talks straight to `IContributionCycleRepository`, protected by validation, the entity's own rules and a thrown `NotFoundException`. `Contribution` now references a real `ContributionCycleId`, which also closes the 4.2 gap where "2026-09" and "2026-9" were treated as different cycles.
+
+### Correlation ID walkthrough
+Response body (`POST /api/users`, blank first name):
+```json
+<paste the real response body here, with its correlationId>
+```
+Matching log line from the terminal:
+```
+<paste the real log line here, with the same CorrelationId>
+```
+
+### Live demonstrations (request + response bodies)
+<paste the 400, 404 and 409 request/response bodies from Scalar here>
+
+### Retrofit
+Every endpoint from 4.1, 4.2 and 4.3 now throws instead of building a response. `ToProblem` and `NotFoundProblem` were deleted; `RondiTrackExceptionHandler` is the only place a `ProblemDetails` is created. Unknown routes are covered by `UseStatusCodePages` + `AddProblemDetails`, and unreadable bodies by `ValidationFilter`, so no endpoint keeps a bespoke error response.
+
+### Tests
+`RondiTrack.Api.Tests/NegativePathTests.cs` uses `WebApplicationFactory<Program>` to prove, over real HTTP, that a malformed request (400), a not-found (404) and business-rule violations (409, 422) each return the right status code and `application/problem+json`.

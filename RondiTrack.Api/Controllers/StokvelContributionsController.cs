@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Data;
@@ -14,9 +15,11 @@ public class StokvelContributionsController(
     IContributionRepository contributions,
     IContributionService contributionService) : ApiControllerBase
 {
-    // GET /api/stokvels/{stokvelId}/contributions -> 200, or 404 (stokvel missing)
-    // Pure read, no decision -> straight to the repository.
     [HttpGet]
+    [EndpointSummary("List a stokvel's recorded contributions")]
+    [EndpointDescription("Returns every contribution recorded for this stokvel, across all cycles.")]
+    [ProducesResponseType<List<ContributionResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<ContributionResponse>>> GetAll(Guid stokvelId, CancellationToken ct)
     {
         _ = await stokvels.GetByIdAsync(stokvelId, ct)
@@ -26,9 +29,20 @@ public class StokvelContributionsController(
         return Ok(list.Select(ContributionResponse.FromEntity).ToList());
     }
 
-    // POST /api/stokvels/{stokvelId}/contributions   (header: Idempotency-Key)
-    //   201 on success AND on an identical retry (same body). 400 / 404 / 409 / 422 on failure.
     [HttpPost]
+    [EndpointSummary("Record an idempotent contribution payment")]
+    [EndpointDescription(
+        "Records a member's payment for a specific contribution cycle. REQUIRES an " +
+        "Idempotency-Key header. Safe to retry: sending the exact same key and body again " +
+        "returns the original response rather than recording a second payment. Reusing the " +
+        "same key with a DIFFERENT body is rejected with 409. Fails with 422 if the user is " +
+        "not a member of this stokvel or the cycle does not belong to it, and with 409 if this " +
+        "member has already paid for this cycle.")]
+    [ProducesResponseType<ContributionResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<ContributionResponse>> Record(
         Guid stokvelId,
         ContributionRequest request,
@@ -44,7 +58,6 @@ public class StokvelContributionsController(
 
         var outcome = result.ThrowIfFailure();
 
-        // Optional: tell the client this was a replay (the body is identical either way).
         if (outcome.WasReplayed)
             Response.Headers["Idempotent-Replayed"] = "true";
 

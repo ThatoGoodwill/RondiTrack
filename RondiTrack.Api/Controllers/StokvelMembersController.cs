@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Data;
@@ -14,8 +15,11 @@ namespace RondiTrack.Api.Controllers;
 public class StokvelMembersController(IStokvelRepository stokvels, IMembershipService membershipService)
     : ApiControllerBase
 {
-    // GET /api/stokvels/{stokvelId}/members  -> 200, or 404 (stokvel missing)
     [HttpGet]
+    [EndpointSummary("List a stokvel's members")]
+    [EndpointDescription("Returns every membership for the given stokvel. Returns an empty list, not an error, if the stokvel has no members yet.")]
+    [ProducesResponseType<List<MembershipResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<MembershipResponse>>> GetAll(Guid stokvelId, CancellationToken ct)
     {
         var stokvel = await stokvels.GetByIdAsync(stokvelId, ct)
@@ -23,11 +27,14 @@ public class StokvelMembersController(IStokvelRepository stokvels, IMembershipSe
         return Ok(stokvel.Members.Select(MembershipResponse.FromEntity).ToList());
     }
 
-    // GET /api/stokvels/{stokvelId}/members/{userId}  -> 200, or 404
     [HttpGet("{userId:guid}")]
+    [EndpointSummary("Get one membership")]
+    [EndpointDescription("Returns one membership. 404 if either the stokvel or the membership does not exist.")]
+    [ProducesResponseType<MembershipResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MembershipResponse>> GetById(Guid stokvelId, Guid userId, CancellationToken ct)
     {
-        var stokvel = await stokvels.GetByIdAsync(stokvelId, ct)          // check the PARENT first
+        var stokvel = await stokvels.GetByIdAsync(stokvelId, ct)
             ?? throw new NotFoundException("stokvel.not_found", $"No stokvel with id {stokvelId} exists.");
 
         var membership = stokvel.GetMember(userId)
@@ -35,8 +42,17 @@ public class StokvelMembersController(IStokvelRepository stokvels, IMembershipSe
         return Ok(MembershipResponse.FromEntity(membership));
     }
 
-    // POST /api/stokvels/{stokvelId}/members  -> 201, or 400 / 404 / 409 / 422
     [HttpPost]
+    [EndpointSummary("Add a member to a stokvel")]
+    [EndpointDescription(
+        "Adds an existing user as a member of an existing stokvel. Fails if the stokvel or user " +
+        "does not exist, if the user is already a member, or if the stokvel has reached its " +
+        "maximum member count. Membership order is not guaranteed to reflect payout order.")]
+    [ProducesResponseType<MembershipResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<MembershipResponse>> Add(Guid stokvelId, AddMemberRequest request, CancellationToken ct)
     {
         var membership = (await membershipService.AddMemberAsync(stokvelId, request.UserId, ct)).ThrowIfFailure();
@@ -45,8 +61,11 @@ public class StokvelMembersController(IStokvelRepository stokvels, IMembershipSe
         return CreatedAtAction(nameof(GetById), new { stokvelId, userId = response.UserId }, response);
     }
 
-    // DELETE /api/stokvels/{stokvelId}/members/{userId}  -> 204, or 404
     [HttpDelete("{userId:guid}")]
+    [EndpointSummary("Remove a member from a stokvel")]
+    [EndpointDescription("Removes a membership. 404 if the stokvel does not exist or the user is not currently a member.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Remove(Guid stokvelId, Guid userId, CancellationToken ct)
     {
         (await membershipService.RemoveMemberAsync(stokvelId, userId, ct)).ThrowIfFailure();
