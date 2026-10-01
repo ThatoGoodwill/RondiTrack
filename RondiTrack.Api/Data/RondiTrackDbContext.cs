@@ -44,17 +44,24 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
  entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
  entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
  });
- // ---- Contribution ----
- modelBuilder.Entity<Contribution>(entity =>
- {
- entity.HasKey(c => c.Id);
- entity.Property(c => c.Amount).HasPrecision(18, 2);
- });
- // ---- Payout (new -- see Step 5) ----
- modelBuilder.Entity<Payout>(entity =>
- {
- entity.HasKey(p => p.Id);
- entity.Property(p => p.Amount).HasPrecision(18, 2);
- });
+// ---- ContributionCycle ----
+modelBuilder.Entity<ContributionCycle>(entity =>
+{
+    entity.HasKey(c => c.Id);
+    entity.Property(c => c.StokvelId).IsRequired();
+    entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
+    entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
+    entity.Property(c => c.CreatedAt).IsRequired();
+});
+ // ---- Payout ----
+modelBuilder.Entity<Payout>(entity =>
+{
+    entity.HasKey(p => p.Id);
+    entity.Property(p => p.StokvelId).IsRequired();
+    entity.Property(p => p.ContributionCycleId).IsRequired();
+    entity.Property(p => p.RecipientUserId).IsRequired();
+    entity.Property(p => p.Amount).HasPrecision(18, 2);
+    entity.Property(p => p.ProcessedAt).IsRequired();
+});
  }
 }
