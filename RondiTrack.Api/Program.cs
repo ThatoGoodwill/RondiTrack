@@ -6,6 +6,7 @@ using RondiTrack.Api.OpenApi;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Validators;
 using Scalar.AspNetCore;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,9 @@ builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 builder.Services.AddSingleton<IUserService, UserService>();
 builder.Services.AddSingleton<IMembershipService, MembershipService>();
 builder.Services.AddSingleton<IContributionService, ContributionService>();
+
+builder.Services.AddDbContext<RondiTrack.Api.Data.RondiTrackDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("RondiTrack")));
 
 // ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
