@@ -27,6 +27,9 @@ public sealed class ContributionCycle
     public decimal TargetAmount { get; private set; }   // amount expected from each member (ZAR)
     public DateTimeOffset CreatedAt { get; }
 
+    public ContributionCycleStatus Status { get; private set; } = ContributionCycleStatus.Open;
+    public void MarkPaidOut() => Status = ContributionCycleStatus.PaidOut;
+
     public static Result<ContributionCycle> Create(Guid stokvelId, string? label, decimal targetAmount)
     {
         var error = Validate(stokvelId, label, targetAmount);

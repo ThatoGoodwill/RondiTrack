@@ -3,23 +3,25 @@ namespace RondiTrack.Api.Domain;
 // Kept deliberately minimal per the brief: no scheduling, no notifications, no partial payouts.
 public sealed class Payout
 {
+
  private Payout(Guid id, Guid stokvelId, Guid contributionCycleId, Guid recipientUserId,
  decimal amount, DateTimeOffset processedAt)
  {
- Id = id;
- StokvelId = stokvelId;
- ContributionCycleId = contributionCycleId;
- RecipientUserId = recipientUserId;
- Amount = amount;
- ProcessedAt = processedAt;
+         Id = id;
+         StokvelId = stokvelId;
+         ContributionCycleId = contributionCycleId;
+         RecipientUserId = recipientUserId;
+        Amount = amount;
+        ProcessedAt = processedAt;
  }
- public Guid Id { get; }
- public Guid StokvelId { get; }
- public Guid ContributionCycleId { get; }
- public Guid RecipientUserId { get; }
- public decimal Amount { get; }
- public DateTimeOffset ProcessedAt { get; }
- public static Result<Payout> Create(Guid stokvelId, Guid contributionCycleId, Guid recipientUserId, decimal amount)
+
+    public Guid Id { get; }
+    public Guid StokvelId { get; }
+    public Guid ContributionCycleId { get; }
+    public Guid RecipientUserId { get; }
+    public decimal Amount { get; }
+    public DateTimeOffset ProcessedAt { get; }
+    public static Result<Payout> Create(Guid stokvelId, Guid contributionCycleId, Guid recipientUserId, decimal amount)
  {
  if (stokvelId == Guid.Empty)
  return Result<Payout>.Failure(Invalid("payout.stokvel_required", "A stokvel id is required."));
@@ -33,4 +35,10 @@ public sealed class Payout
  Guid.CreateVersion7(), stokvelId, contributionCycleId, recipientUserId, amount, DateTimeOffset.UtcNow));
  }
  private static Error Invalid(string code, string message) => new(ErrorType.Validation, code, message);
+}
+
+public enum ContributionCycleStatus
+{
+    Open = 1,
+    PaidOut = 2
 }
