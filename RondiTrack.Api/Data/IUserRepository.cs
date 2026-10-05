@@ -16,4 +16,5 @@ public interface IUserRepository
 
     Task AddAsync(User user, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task SaveChangesAsync(CancellationToken ct = default);
 }

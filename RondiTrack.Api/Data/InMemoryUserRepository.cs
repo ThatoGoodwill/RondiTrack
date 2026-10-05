@@ -37,4 +37,6 @@ public sealed class InMemoryUserRepository : IUserRepository
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(_users.TryRemove(id, out _));
+
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
 }

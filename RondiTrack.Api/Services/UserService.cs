@@ -40,7 +40,9 @@ public sealed class UserService(IUserRepository users, IStokvelRepository stokve
             return Result<User>.Failure(EmailTaken());
 
         var result = user.Update(firstName, lastName, email, dateOfBirth);
-        return result.IsSuccess ? Result<User>.Success(user) : Result<User>.Failure(result.Error);
+       if (!result.IsSuccess) return Result<User>.Failure(result.Error);
+await users.AddAsync(user, ct);   // harmless no-op for already-tracked entities against EF Core; triggers SaveChanges
+return Result<User>.Success(user);
     }
 
     public async Task<Result> DeleteUserAsync(Guid id, CancellationToken ct = default)

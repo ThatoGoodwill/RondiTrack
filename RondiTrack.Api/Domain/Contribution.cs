@@ -52,5 +52,5 @@ public sealed class Contribution
     }
 
     private static Result<Contribution> Fail(string code, string message) =>
-        Result<Contribution>.Failure(new Error(ErrorType.Validation, code, message));
+        Result<Contribution>.Failure(new Error(ErrorType.Validation, code, message)); 
 }
