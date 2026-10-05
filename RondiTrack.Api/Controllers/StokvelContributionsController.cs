@@ -67,19 +67,24 @@ public class StokvelContributionsController(
     }
 
         // DELIBERATELY NAIVE (Step 6): one query for the list, then one extra query per row.
-    [HttpGet("/api/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/contributions")]
-    public async Task<ActionResult<List<object>>> GetByCycleNaive(Guid stokvelId, Guid cycleId, CancellationToken ct)
-    {
-        var rows = await context.Contributions
-            .Where(c => c.ContributionCycleId == cycleId)
-            .ToListAsync(ct);                                   // query #1
+   [HttpGet("/api/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/contributions")]
+   public async Task<ActionResult<List<object>>> GetByCycle(Guid stokvelId, Guid cycleId, CancellationToken ct)
+   {
+      var contributions = await context.Contributions
+        .Where(c => c.StokvelId == stokvelId && c.ContributionCycleId == cycleId)
+        .Include(c => c.User)
+        .AsNoTracking()
+        .ToListAsync(ct);
 
-        var results = new List<object>();
-        foreach (var c in rows)
+      var results = contributions
+        .Select(c => (object)new
         {
-            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == c.UserId, ct);   // query #2, #3, #4...
-            results.Add(new { c.Id, c.Amount, UserName = user!.FirstName + " " + user.LastName });
-        }
-        return Ok(results);
+            c.Id,
+            c.Amount,
+            UserName = c.User!.FirstName + " " + c.User.LastName
+        })
+        .ToList();
+
+      return Ok(results);
     }
 }

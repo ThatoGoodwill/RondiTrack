@@ -28,6 +28,7 @@ public sealed class Contribution
     public Guid Id { get; }
     public Guid StokvelId { get; }
     public Guid UserId { get; }
+    public User? User { get; private set; }
     public Guid ContributionCycleId { get; }
     public decimal Amount { get; }               // decimal, never double: this is money
     public DateTimeOffset RecordedAt { get; }

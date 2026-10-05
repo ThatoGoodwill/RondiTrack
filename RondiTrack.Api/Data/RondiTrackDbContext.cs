@@ -87,10 +87,10 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(c => c.RecordedAt);
             entity.Property(c => c.Amount).HasPrecision(18, 2);
 
-            entity.HasOne<User>()
-                .WithMany()
-                .HasForeignKey(c => c.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
+           entity.HasOne(c => c.User)
+                 .WithMany()
+                 .HasForeignKey(c => c.UserId)
+                 .OnDelete(DeleteBehavior.Restrict);
         });
 
                 // ---- Payout ----

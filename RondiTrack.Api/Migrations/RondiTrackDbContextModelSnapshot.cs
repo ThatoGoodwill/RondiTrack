@@ -50,7 +50,7 @@ namespace RondiTrack.Api.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Contributions");
+                    b.ToTable("Contributions", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.ContributionCycle", b =>
@@ -79,7 +79,7 @@ namespace RondiTrack.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ContributionCycles");
+                    b.ToTable("ContributionCycles", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.Payout", b =>
@@ -106,7 +106,7 @@ namespace RondiTrack.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Payouts");
+                    b.ToTable("Payouts", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.Stokvel", b =>
@@ -135,7 +135,7 @@ namespace RondiTrack.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Stokvels");
+                    b.ToTable("Stokvels", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.StokvelMember", b =>
@@ -158,7 +158,7 @@ namespace RondiTrack.Api.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("StokvelMembers");
+                    b.ToTable("StokvelMembers", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.User", b =>
@@ -192,7 +192,7 @@ namespace RondiTrack.Api.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("RondiTrack.Api.Domain.Contribution", b =>
