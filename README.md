@@ -98,3 +98,98 @@ Every endpoint from 4.1, 4.2 and 4.3 now throws instead of building a response. 
 
 ### Tests
 `RondiTrack.Api.Tests/NegativePathTests.cs` uses `WebApplicationFactory<Program>` to prove, over real HTTP, that a malformed request (400), a not-found (404) and business-rule violations (409, 422) each return the right status code and `application/problem+json`.
+
+## Assignment 5.1: EF Core & Database Foundations
+
+### 1. PostgreSQL setup (reproducible from a clean machine)
+
+**Choice: native install on Windows, not Docker.** My machine cannot run Docker, so I installed PostgreSQL directly.
+
+Steps (a teammate with nothing installed can follow these):
+
+1. Download the Windows installer from postgresql.org (EDB installer, version **[FILL IN, e.g. 17]**). Keep port `5432`, set a password for the `postgres` superuser, and tick "Command Line Tools" so `psql` is installed.
+2. Add the `bin` folder to PATH for the session:
+```powershell
+   $env:Path += ";C:\Program Files\PostgreSQL\[VERSION]\bin"
+   psql --version
+```
+3. Create a dedicated login and database for RondiTrack:
+```powershell
+   psql -U postgres -h localhost
+```
+```sql
+   CREATE ROLE ronditrack_app LOGIN PASSWORD '<choose-a-password>';
+   CREATE DATABASE ronditrack OWNER ronditrack_app;
+   \q
+```
+   **[FILL IN: if you used the postgres user instead of a dedicated role, change the above to match what you actually did.]**
+4. Prove connectivity independently of the API:
+```powershell
+   psql -h localhost -U ronditrack_app -d ronditrack -c "select current_database(), version();"
+```
+   Result: **[FILL IN: paste the output or add a screenshot]**
+
+### 2. Secret management
+
+The connection string is never stored in a tracked file. `appsettings.json` and `appsettings.Development.json` contain no connection string. I use .NET User Secrets, stored in `%APPDATA%\Microsoft\UserSecrets\<id>\secrets.json`, outside the repo. Only the `UserSecretsId` (a meaningless GUID) is committed in the `.csproj`.
+
+A teammate gets running with:
+
+```powershell
+cd RondiTrack.Api
+dotnet user-secrets set "ConnectionStrings:RondiTrack" "Host=localhost;Port=5432;Database=ronditrack;Username=<their-user>;Password=<their-password>"
+```
+
+**[FILL IN: confirm you checked `git log -p --all -S"Password="` shows nothing.]**
+
+### 3. The mapping problem
+
+When I ran `dotnet ef migrations add InitialCreate`, EF Core refused to create the DbContext:
+
+> No suitable constructor was found for the type 'Contribution'. ... Cannot bind 'stokvelId', 'userId', 'contributionCycleId', 'recordedAt' ...
+
+The same error then appeared for `ContributionCycle` (`stokvelId`, `createdAt`).
+
+**Why:** my entities use private constructors and get-only properties (a design from Assignment 4.1). EF Core only maps properties with a setter by convention, and it can only bind constructor parameters to *mapped* properties. So the properties I hadn't configured weren't mapped and the constructor couldn't be bound.
+
+**Decision:** I configured each property explicitly in `OnModelCreating` (`entity.Property(c => c.StokvelId).IsRequired()` and so on) instead of adding public setters. That keeps the entities' encapsulation unchanged. I accepted a longer `OnModelCreating` as the cost.
+
+**[FILL IN: Stokvel's private `_members` list, if it caused a second problem for you, and what you did about it.]**
+
+### 4. First migration review
+
+**[FILL IN once the migration generates. State what you checked, for example: all six tables are created with the columns I expect; money columns are `numeric(18,2)`; `Users.Email` has a unique index; foreign keys exist where expected; there are no `DropColumn`/`AddColumn` pairs.]**
+
+Why I check for drop-and-add: a migration generator cannot tell a renamed column from a deleted one plus a new one. Applied to real data, that drops the column and loses its contents. On a first migration there is no data, but I read every later migration for this.
+
+### 5. Npgsql retry configuration
+
+Configured: `EnableRetryOnFailure(maxRetryCount: [FILL IN], maxRetryDelay: [FILL IN])`.
+
+**[FILL IN: your reasoning for the numbers.]** Retry: a momentary connection drop or a transient network error. Do not retry: a unique-constraint violation on `Users.Email`, because it will fail the same way every time.
+
+### 6. Repository swapped
+
+**[FILL IN: which repository, why you picked it, and the DI lifetime change from Singleton to Scoped.]**
+
+Why the lifetime had to flip: a `DbContext` is not thread-safe and holds a connection and a change tracker. As a Singleton it would be shared by all concurrent requests, so one request's pending changes would leak into another's and two requests using it at once would throw. Scoped gives one context per request.
+
+### 7. Test suite before and after
+
+BEFORE (in-memory): **[FILL IN: paste the `dotnet test` summary line]**
+
+AFTER (real PostgreSQL): **[FILL IN: paste the summary line, and note anything that went red and what it exposed]**
+
+The suite runs against my local PostgreSQL instance. Testcontainers arrives on Day 4.
+
+### 8. Payout rule and transaction
+
+**[FILL IN: your rotation rule, what the endpoint is, which two writes the explicit transaction protects, and the rollback test result. If not done, say so in section 10.]**
+
+### 9. Definition of Done (extended)
+
+**[FILL IN: your 4.4 table plus the two new columns: "Persisted via EF Core" and "Explicit transaction tested". Use an honest "No" where it applies.]**
+
+### 10. Gaps I chose not to close yet
+
+**[FILL IN honestly. Examples if true: repositories other than the one swapped are still in-memory by design; the Payout endpoint has no database-level unique constraint to stop two concurrent payouts; the migration was blocked by mapping errors and was not applied before submission.]**

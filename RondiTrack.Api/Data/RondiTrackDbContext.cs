@@ -59,54 +59,25 @@ modelBuilder.Entity<Stokvel>(entity =>
  entity.HasKey("StokvelId", "UserId"); // a composite key: one row per (stokvel, user) pair
  entity.Property<Guid>("StokvelId");
  });
- 
-modelBuilder.Entity<ContributionCycle>(entity =>
-{
-    entity.HasKey(c => c.Id);
+ // ---- ContributionCycle ----
+ modelBuilder.Entity<ContributionCycle>(entity =>
 
-    entity.Property(c => c.StokvelId);
-
-    entity.Property(c => c.Label)
-        .IsRequired();
-
-    entity.Property(c => c.TargetAmount)
-        .HasPrecision(18, 2);
-
-    entity.Property(c => c.CreatedAt);
-});
- 
+ {
+ entity.HasKey(c => c.Id);
+ entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
+ entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
+ });
  // ---- Contribution ----
-modelBuilder.Entity<Contribution>(entity =>
-{
-    entity.HasKey(c => c.Id);
-
-    entity.Property(c => c.StokvelId);
-
-    entity.Property(c => c.UserId);
-
-    entity.Property(c => c.ContributionCycleId);
-
-    entity.Property(c => c.Amount)
-        .HasPrecision(18, 2);
-
-    entity.Property(c => c.RecordedAt);
-});
- 
- // ---- Payout ----
+ modelBuilder.Entity<Contribution>(entity =>
+ {
+ entity.HasKey(c => c.Id);
+ entity.Property(c => c.Amount).HasPrecision(18, 2);
+ });
+ // ---- Payout (new -- see Step 5) ----
  modelBuilder.Entity<Payout>(entity =>
  {
-     entity.HasKey(p => p.Id);
-
-     entity.Property(p => p.StokvelId);
-
-     entity.Property(p => p.ContributionCycleId);
-
-     entity.Property(p => p.RecipientUserId);
-
-     entity.Property(p => p.Amount)
-         .HasPrecision(18, 2);
-
-     entity.Property(p => p.ProcessedAt);
+ entity.HasKey(p => p.Id);
+ entity.Property(p => p.Amount).HasPrecision(18, 2);
  });
  }
 }
