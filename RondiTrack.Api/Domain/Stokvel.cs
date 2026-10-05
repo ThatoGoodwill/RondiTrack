@@ -15,7 +15,7 @@ public sealed class Stokvel
     public const int MaxAllowedMembers = 50;
     public const decimal MaxContribution = 1_000_000m;   // sanity ceiling (typo guard), in ZAR
 
-    private readonly List<Membership> _members = [];      // nothing outside can touch this
+    private readonly List<StokvelMember>_members = [];
     private readonly Lock _sync = new();                  // requests run in parallel: lock around list changes
 
     private Stokvel(Guid id, string name, decimal contributionAmount,
@@ -37,7 +37,7 @@ public sealed class Stokvel
     public DateTimeOffset CreatedAt { get; }
 
     // A SNAPSHOT copy: callers can neither modify our list nor be broken by concurrent changes.
-    public IReadOnlyList<Membership> Members
+    public IReadOnlyList<StokvelMember> Members
     {
         get { lock (_sync) { return _members.ToArray(); } }
     }
@@ -95,7 +95,7 @@ public sealed class Stokvel
                 return Result.Failure(new Error(ErrorType.Conflict, "stokvel.full",
                     $"This stokvel has reached its maximum of {MaxMembers} members."));
 
-            _members.Add(new Membership(userId, DateTimeOffset.UtcNow));
+            _members.Add(StokvelMember.Create(Id, userId));
             return Result.Success();
         }
     }
@@ -112,7 +112,7 @@ public sealed class Stokvel
         }
     }
 
-    public Membership? GetMember(Guid userId)
+    public StokvelMember? GetMember(Guid userId)
     {
         lock (_sync) { return _members.FirstOrDefault(m => m.UserId == userId); }
     }

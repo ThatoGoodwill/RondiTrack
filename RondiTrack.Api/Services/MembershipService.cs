@@ -9,23 +9,23 @@ namespace RondiTrack.Api.Services;
 //   3. duplicate member / stokvel full?              -> Conflict (409), decided by the Stokvel ENTITY
 public sealed class MembershipService(IStokvelRepository stokvels, IUserRepository users) : IMembershipService
 {
-    public async Task<Result<Membership>> AddMemberAsync(Guid stokvelId, Guid userId, CancellationToken ct = default)
+    public async Task<Result<StokvelMember>> AddMemberAsync(Guid stokvelId, Guid userId, CancellationToken ct = default)
     {
         var stokvel = await stokvels.GetByIdAsync(stokvelId, ct);
         if (stokvel is null)
-            return Result<Membership>.Failure(new Error(ErrorType.NotFound, "stokvel.not_found",
+            return Result<StokvelMember>.Failure(new Error(ErrorType.NotFound, "stokvel.not_found",
                 $"No stokvel with id {stokvelId} exists."));
 
         // The Stokvel cannot look at users; that is why this check lives in the service.
         if (!await users.ExistsAsync(userId, ct))
-            return Result<Membership>.Failure(new Error(ErrorType.Unprocessable, "membership.user_not_found",
+            return Result<StokvelMember>.Failure(new Error(ErrorType.Unprocessable, "membership.user_not_found",
                 $"No user with id {userId} exists."));
 
         // The Stokvel's OWN rules (no duplicates, not full) stay inside the entity.
         var result = stokvel.AddMember(userId);
-        if (!result.IsSuccess) return Result<Membership>.Failure(result.Error);
+        if (!result.IsSuccess) return Result<StokvelMember>.Failure(result.Error);
 
-        return Result<Membership>.Success(stokvel.GetMember(userId)!);
+        return Result<StokvelMember>.Success(stokvel.GetMember(userId)!);
     }
 
     public async Task<Result> RemoveMemberAsync(Guid stokvelId, Guid userId, CancellationToken ct = default)
