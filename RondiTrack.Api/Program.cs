@@ -41,6 +41,8 @@ builder.Services.AddSingleton<IUserService, UserService>();
 builder.Services.AddSingleton<IMembershipService, MembershipService>();
 builder.Services.AddSingleton<IContributionService, ContributionService>();
 
+
+
 builder.Services.AddDbContext<RondiTrack.Api.Data.RondiTrackDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("RondiTrack")));
 
