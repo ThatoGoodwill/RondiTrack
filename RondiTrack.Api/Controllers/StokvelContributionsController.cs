@@ -76,15 +76,16 @@ public class StokvelContributionsController(
         .AsNoTracking()
         .ToListAsync(ct);
 
-      var results = contributions
-        .Select(c => (object)new
-        {
-            c.Id,
-            c.Amount,
-            UserName = c.User!.FirstName + " " + c.User.LastName
-        })
-        .ToList();
+     var results = await context.Contributions
+       .Where(c => c.StokvelId == stokvelId && c.ContributionCycleId == cycleId)
+       .Select(c => new
+     {
+        c.Id,
+        c.Amount,
+        UserName = c.User!.FirstName + " " + c.User.LastName
+     })
+         .ToListAsync(ct);
 
-      return Ok(results);
+          return Ok(results);
     }
 }
