@@ -77,7 +77,7 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Navigation(c => c.Contributions)
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
         });
-                // ---- Contribution ----
+                       // ---- Contribution ----
         modelBuilder.Entity<Contribution>(entity =>
         {
             entity.HasKey(c => c.Id);
@@ -86,6 +86,11 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(c => c.ContributionCycleId);
             entity.Property(c => c.RecordedAt);
             entity.Property(c => c.Amount).HasPrecision(18, 2);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
                 // ---- Payout ----
