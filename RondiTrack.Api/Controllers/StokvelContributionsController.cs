@@ -5,6 +5,7 @@ using RondiTrack.Api.Data;
 using RondiTrack.Api.Domain;
 using RondiTrack.Api.Exceptions;
 using RondiTrack.Api.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -13,7 +14,8 @@ namespace RondiTrack.Api.Controllers;
 public class StokvelContributionsController(
     IStokvelRepository stokvels,
     IContributionRepository contributions,
-    IContributionService contributionService) : ApiControllerBase
+    IContributionService contributionService,
+     RondiTrackDbContext context) : ApiControllerBase
 {
     [HttpGet]
     [EndpointSummary("List a stokvel's recorded contributions")]
@@ -62,5 +64,22 @@ public class StokvelContributionsController(
             Response.Headers["Idempotent-Replayed"] = "true";
 
         return StatusCode(StatusCodes.Status201Created, outcome.Response);
+    }
+
+        // DELIBERATELY NAIVE (Step 6): one query for the list, then one extra query per row.
+    [HttpGet("/api/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/contributions")]
+    public async Task<ActionResult<List<object>>> GetByCycleNaive(Guid stokvelId, Guid cycleId, CancellationToken ct)
+    {
+        var rows = await context.Contributions
+            .Where(c => c.ContributionCycleId == cycleId)
+            .ToListAsync(ct);                                   // query #1
+
+        var results = new List<object>();
+        foreach (var c in rows)
+        {
+            var user = await context.Users.FirstOrDefaultAsync(u => u.Id == c.UserId, ct);   // query #2, #3, #4...
+            results.Add(new { c.Id, c.Amount, UserName = user!.FirstName + " " + user.LastName });
+        }
+        return Ok(results);
     }
 }
