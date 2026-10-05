@@ -46,6 +46,7 @@ builder.Services.AddSingleton<IContributionService, ContributionService>();
 builder.Services.AddDbContext<RondiTrack.Api.Data.RondiTrackDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("RondiTrack")));
 
+builder.Services.AddScoped<IStokvelMemberRepository, SqlStokvelMemberRepository>();
 // ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 
