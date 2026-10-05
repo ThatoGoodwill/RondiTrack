@@ -61,8 +61,7 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
                 .HasForeignKey(sm => sm.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
-
-                // ---- ContributionCycle ----
+        // ---- ContributionCycle ----
         modelBuilder.Entity<ContributionCycle>(entity =>
         {
             entity.HasKey(c => c.Id);
@@ -70,6 +69,13 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(c => c.CreatedAt);
             entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
             entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
+
+            entity.HasMany(c => c.Contributions)
+                .WithOne()
+                .HasForeignKey(c => c.ContributionCycleId);
+
+            entity.Navigation(c => c.Contributions)
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
         });
                 // ---- Contribution ----
         modelBuilder.Entity<Contribution>(entity =>

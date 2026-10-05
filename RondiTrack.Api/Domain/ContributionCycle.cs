@@ -9,8 +9,17 @@ namespace RondiTrack.Api.Domain;
 // ---------------------------------------------------------------------------------
 public sealed class ContributionCycle
 {
+    
+    private readonly object _sync = new(); 
+    private readonly List<Contribution> _contributions = [];
+
     public const int MaxLabelLength = 40;
     public const decimal MaxTargetAmount = 1_000_000m;
+
+    public IReadOnlyList<Contribution> Contributions
+    {
+        get { lock (_sync) { return _contributions.ToArray(); } }
+    }
 
     private ContributionCycle(Guid id, Guid stokvelId, string label, decimal targetAmount, DateTimeOffset createdAt)
     {
