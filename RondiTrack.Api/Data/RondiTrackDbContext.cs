@@ -62,25 +62,34 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ---- ContributionCycle ----
+                // ---- ContributionCycle ----
         modelBuilder.Entity<ContributionCycle>(entity =>
         {
             entity.HasKey(c => c.Id);
+            entity.Property(c => c.StokvelId);
+            entity.Property(c => c.CreatedAt);
             entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
             entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
         });
-
-        // ---- Contribution ----
+                // ---- Contribution ----
         modelBuilder.Entity<Contribution>(entity =>
         {
             entity.HasKey(c => c.Id);
+            entity.Property(c => c.StokvelId);
+            entity.Property(c => c.UserId);
+            entity.Property(c => c.ContributionCycleId);
+            entity.Property(c => c.RecordedAt);
             entity.Property(c => c.Amount).HasPrecision(18, 2);
         });
 
-        // ---- Payout ----
+                // ---- Payout ----
         modelBuilder.Entity<Payout>(entity =>
         {
             entity.HasKey(p => p.Id);
+            entity.Property(p => p.StokvelId);
+            entity.Property(p => p.ContributionCycleId);
+            entity.Property(p => p.RecipientUserId);
+            entity.Property(p => p.ProcessedAt);
             entity.Property(p => p.Amount).HasPrecision(18, 2);
         });
     }
