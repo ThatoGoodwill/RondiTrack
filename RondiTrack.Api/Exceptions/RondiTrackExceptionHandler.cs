@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace RondiTrack.Api.Exceptions;
 
@@ -64,6 +66,18 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
                     .GroupBy(x => x.PropertyName)
                     .ToDictionary(g => g.Key, g => g.Select(x => x.ErrorMessage).ToArray());
                 break;
+
+                case DbUpdateConcurrencyException:
+                      status = StatusCodes.Status409Conflict;
+                      code = "concurrency.stale_version";
+                      detail = "This record was modified by someone else since you last read it. Fetch it again and retry.";
+                break;
+
+           case DbUpdateException { InnerException: PostgresException { SqlState: "23505" } }:
+                status = StatusCodes.Status409Conflict;
+                code = "database.unique_violation";
+                detail = "This operation conflicts with an existing record.";
+            break;
 
             default:                                        // anything we did NOT plan for = a bug
                 status = StatusCodes.Status500InternalServerError;

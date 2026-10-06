@@ -3,6 +3,9 @@ namespace RondiTrack.Api.Domain;
 // Kept deliberately minimal per the brief: no scheduling, no notifications, no partial payouts.
 public sealed class Payout
 {
+
+ public uint Version { get; private set; }
+
  private Payout(Guid id, Guid stokvelId, Guid contributionCycleId, Guid recipientUserId,
  decimal amount, DateTimeOffset processedAt)
  {

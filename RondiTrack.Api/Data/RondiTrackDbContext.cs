@@ -91,6 +91,13 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
                  .WithMany()
                  .HasForeignKey(c => c.UserId)
                  .OnDelete(DeleteBehavior.Restrict);
+
+                 entity.HasIndex(c => new { c.StokvelId, c.UserId, c.ContributionCycleId })
+                       .IsUnique()
+                       .HasDatabaseName("UX_Contributions_Stokvel_User_Cycle");
+
+                 entity.HasIndex(c => new { c.StokvelId, c.RecordedAt, c.Id })
+                       .HasDatabaseName("IX_Contributions_StokvelId_RecordedAt_Id");
         });
 
                 // ---- Payout ----
@@ -102,6 +109,7 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(p => p.RecipientUserId);
             entity.Property(p => p.ProcessedAt);
             entity.Property(p => p.Amount).HasPrecision(18, 2);
+            entity.Property(p => p.Version).IsRowVersion();
         });
     }
 }

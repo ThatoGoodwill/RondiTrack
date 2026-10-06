@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RondiTrack.Api.Data;
@@ -11,9 +12,11 @@ using RondiTrack.Api.Data;
 namespace RondiTrack.Api.Migrations
 {
     [DbContext(typeof(RondiTrackDbContext))]
-    partial class RondiTrackDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006061540_AddContributionUniqueAndPagingIndex")]
+    partial class AddContributionUniqueAndPagingIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -110,12 +113,6 @@ namespace RondiTrack.Api.Migrations
 
                     b.Property<Guid>("StokvelId")
                         .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 
