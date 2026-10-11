@@ -193,3 +193,280 @@ The suite runs against my local PostgreSQL instance. Testcontainers arrives on D
 ### 10. Gaps I chose not to close yet
 
 **[FILL IN honestly. Examples if true: repositories other than the one swapped are still in-memory by design; the Payout endpoint has no database-level unique constraint to stop two concurrent payouts; the migration was blocked by mapping errors and was not applied before submission.]**
+
+#### ### ## # RondiTrack, Assignment 5.2: Relationships & Query Behavior
+
+> Items marked **[FILL IN]** or **[CONFIRM]** are things I could not verify from the terminal output I was given. Replace them with your own real results before submitting. Everything else is based on the logs and decisions from this project.
+
+---
+
+## 1. StokvelMember's composite key
+
+`StokvelMember` is a real entity, not an implicit many-to-many. A user can belong to many stokvels and a stokvel has many members, but the relationship carries its own data: `Role` and `JoinedAtUtc`. A hidden join table could hold neither, so the relationship needed to be an entity.
+
+**Why a natural composite key `(StokvelId, UserId)` and not a surrogate `Guid Id`:**
+
+- The pair already uniquely identifies a membership. A user is a member of a given stokvel at most once, which is exactly the rule `Stokvel.AddMember` enforces ("no duplicates").
+- A surrogate `Id` would sit next to that pair and still need a unique index on `(StokvelId, UserId)` to stop duplicate memberships. That would be two identities for one fact: the surrogate Id nobody asked for and the pair that actually matters.
+- With a surrogate, the database would allow two rows for the same user and stokvel unless I remembered to add the unique constraint. With the composite key, a duplicate is impossible by construction.
+
+**The FK question: how does Contribution or Payout reference a specific membership?** [CONFIRM which option you implemented]
+
+Options considered:
+
+1. **Composite foreign key** `(StokvelId, UserId)` on `Contribution`/`Payout` pointing at `StokvelMember`'s composite key. `Contribution` already stores both `StokvelId` and `UserId`, so this needs no new columns and guarantees that a contribution can only be recorded by someone who is actually a member of that stokvel.
+2. **Reference User and Stokvel separately** (two independent FKs, as it works today). Simple, but it does not guarantee the user is a member of that stokvel.
+3. **Add a surrogate Id to StokvelMember just so others can point at it.** This gives up the key discipline that was the point of the exercise.
+
+Chosen: **[FILL IN: option and reasoning]**. The cost of not choosing option 1 is that membership of the contributor in the stokvel is only enforced in application code, not in the database.
+
+Currently `Contribution.UserId` has an FK to `Users` with `DeleteBehavior.Restrict`.
+
+---
+
+## 2. Replacing generic repository access for StokvelMember
+
+`StokvelMember`'s composite key meant `GetByIdAsync(Guid id)` no longer had a single id to accept. I replaced generic `IRepository<T>` access with a dedicated `IStokvelMemberRepository`, whose methods take both key parts explicitly:
+
+- `GetAsync(stokvelId, userId)` uses `FindAsync([stokvelId, userId])`, with the values in the same order the key was declared
+- `ExistsAsync(stokvelId, userId)`
+- `GetByStokvelAsync(stokvelId)` (read-only, `AsNoTracking`)
+- `AddAsync(member)`
+- `RemoveAsync(stokvelId, userId)`
+
+The generic pattern could not stretch to cover it because its contract promises lookup by a single `Guid` id. Forcing a two-part key through that contract would mean either a fake id or an interface that lies about the entity's identity. The new interface's shape reflects the entity's real identity.
+
+Registered in `Program.cs`: `AddScoped<IStokvelMemberRepository, SqlStokvelMemberRepository>()`.
+
+---
+
+## 3. The ALTER migration
+
+Migration: `AddStokvelMemberCompositeKey` (committed).
+
+What I checked on an ALTER that I would not need to check on a CREATE:
+
+- **Is the old primary key dropped and replaced?** Expect `DropPrimaryKey` followed by `AddPrimaryKey` over two columns. **[FILL IN: what you saw]**
+- **Is the old synthetic `Id` column dropped?** **[FILL IN: yes/no]**
+- **Could a new NOT NULL column (`Role`) fail on existing rows?** A required column with no default would make the migration fail against a table that already has rows. **[FILL IN: whether you had existing rows, and how you handled it: re-seed or default value]**
+- **Are the foreign keys correct?** FK from `StokvelMembers` to `Users` on `UserId`, and to `Stokvels` on `StokvelId`. **[FILL IN]**
+- **Does EF drop and recreate a column instead of altering it in place?** That would destroy the data in it. **[FILL IN: what you saw]**
+
+Additional check this session: after adding the `Contribution.User` navigation, I generated a test migration. Both `Up` and `Down` were empty (no new columns or FKs), so the navigation is model-only. I removed that migration.
+
+---
+
+## 4. Second relationship wired
+
+**ContributionCycle → Contribution** (one-to-many).
+
+I considered **Stokvel → ContributionCycle** instead. It was a fair alternative, but I picked ContributionCycle → Contribution because the N+1 endpoint (`GET /api/stokvels/{stokvelId}/cycles/{cycleId}/contributions`) needs exactly this relationship to demonstrate and fix the problem realistically. Stokvel → ContributionCycle stays as it was: a `Guid` field, not yet a navigation. That is a stated decision, not an oversight.
+
+In addition, `Contribution.User` was added as a real navigation (`HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(Restrict)`), which `Include` requires.
+
+---
+
+## 5. N+1, measured
+
+Test data: one stokvel (`11111111-...`), one cycle (`22222222-...`), 10 users (`Test User1`–`Test User10`), 10 contributions of 500.00, seeded with SQL in psql. Verified with `SELECT COUNT(*)` = 10.
+
+Queries were counted from the EF Core command log (`Microsoft.EntityFrameworkCore.Database.Command: Information`), one request at a time with a cleared terminal.
+
+| Version | 10 contributions | What the log showed |
+|---|---|---|
+| **Naive** (no Include, per-row user lookup) | **11 queries** (1 + 10) | 1 list query, then 10 × `SELECT u."Id", u."CreatedAt", u."DateOfBirth", u."Email", u."FirstName", u."LastName" FROM "Users" ... LIMIT 1` |
+| **Fix A** (`Include` + `AsNoTracking`) | **1 query** | `INNER JOIN "Users"`, 12 columns: 6 from `Contributions` + 6 from `Users` |
+| **Fix B** (`Select` projection) | **1 query** | `SELECT c."Id", c."Amount", u."FirstName" \|\| ' ' \|\| u."LastName" AS "UserName"`, 3 columns returned, 4 source columns read |
+
+**Shipped: Fix B (projection).**
+
+Reasoning:
+
+- The endpoint is a read-only list with a fixed response shape (`Id`, `Amount`, `UserName`). That is what projection is for.
+- Include fetched 12 columns per row (including `DateOfBirth`, `Email`, `CreatedAt` and four extra `Contribution` columns) and materialized `Contribution` and `User` entities that were then discarded. Projection fetched 3 columns and materialized no entities, so **9 fewer columns** per row.
+- Scale: with 50 members instead of 5, both versions still run 1 query. But Include would pull 12 columns × 50 rows and build 100 entity objects, while projection pulls 3 columns × 50 rows and builds none. The gap grows with row count, and with every column later added to `User`, which Include would also drag along.
+- Eager loading would be the better choice if the endpoint needed to hand a full tracked entity graph to code that would modify it. This one does not.
+
+Note: during measurement the Fix B run also printed one Include-shaped query. That was from a leftover request/route using `.Include(c => c.User)`. **[FILL IN: where you found it and what you did]**
+
+---
+
+## 6. Loading strategy, named
+
+No lazy loading anywhere, and no lazy-loading proxies package. That is a design decision, not a missing dependency.
+
+Why I left lazy loading out: it hides queries. The naive endpoint did one extra query per row through a plain property access, and with lazy loading that would be invisible in the code. Each property access would silently become a database round trip, and the N+1 would be even harder to spot. I want every database trip visible in the query that makes it.
+
+| Read path | Strategy | Why |
+|---|---|---|
+| `GET .../cycles/{cycleId}/contributions` | **Projection** (a `.Select()` that joins implicitly) | Fixed read-only response shape, fewest columns |
+| **[FILL IN: another read path, e.g. `GET /api/stokvels/{id}/members`]** | **[Eager (`Include`) or explicit (`Entry(...).Collection(...).LoadAsync()`)]** | **[reason]** |
+
+---
+
+## 7. AsNoTracking audit
+
+Rule: `AsNoTracking()` only where the loaded entity is never mutated and saved afterwards. Methods shared between a pure read and a write path need a split, not a blanket `AsNoTracking()`.
+
+| Method | Used before a mutation? | Decision |
+|---|---|---|
+| `IUserRepository.GetAllAsync` | **[CONFIRM]** No | `AsNoTracking` |
+| `IUserRepository.GetByIdAsync` | **[CONFIRM]** Yes (`UpdateUserAsync`) | Tracked **[FILL IN: or split / `track` parameter if GET also uses it]** |
+| `IStokvelRepository.GetAllAsync` | **[CONFIRM]** No | `AsNoTracking` |
+| `IStokvelRepository.GetByIdAsync` | **[CONFIRM]** Yes (`Replace`, `AddMemberAsync`) | Tracked **[FILL IN: or split]** |
+| `IStokvelMemberRepository.GetByStokvelAsync` | No, pure listing | `AsNoTracking` |
+| `IStokvelMemberRepository.GetAsync` | **[CONFIRM callers]** | `FindAsync` (tracked) |
+| Contributions-by-cycle projection | No | Not an issue: `.Select()` into a DTO or anonymous type never tracks |
+
+Shared-method trap: **[FILL IN: whether you found one, and how you resolved it (parameter with a default, or two methods)]**
+
+---
+
+## 8. Test suite, before/after
+
+```
+BEFORE today's changes:  [FILL IN: e.g. Passed! - Failed: 0, Passed: X, Total: X]
+AFTER (first run):       [FILL IN: failures and what they referenced]
+AFTER (fixed):           [FILL IN]
+```
+
+What it exposed: **[FILL IN: e.g. tests that referenced `Membership.JoinedAt`, or an `.Id` on StokvelMember]**.
+
+If nothing broke, list which tests you checked and confirm they never touched `StokvelMember.Id` or the old generic repository.
+
+---
+
+## 9. Definition of Done, extended
+
+| Endpoint | (5.1 columns) | Relationship = real navigation | N+1 measured and fixed |
+|---|---|---|---|
+| `POST /api/stokvels/{id}/members` | ... | Yes, StokvelMember composite key | N/A |
+| `GET /api/stokvels/{id}/cycles/{id}/contributions` | ... | Yes, ContributionCycle → Contribution, Contribution → User | Yes, 11 queries → 1 (see §5) |
+| `POST /api/users` | ... | N/A, no relationship | N/A |
+
+---
+
+## 10. Gaps not closed
+
+- `Stokvel → ContributionCycle` remains a plain `Guid` field (not yet a navigation).
+- `Payout` still references its recipient as before. **[CONFIRM: no change needed / what changed]**
+- Contribution membership is enforced by **[FILL IN: composite FK / application code]** (see §1).
+- During testing, `GET`s for the seeded stokvel `11111111-...` returned `404 stokvel.not_found` from a different endpoint while the stokvel existed in Postgres. **[FILL IN: cause, e.g. repository still in-memory or a missing field, or leave as an open issue]**
+
+### # RondiTrack, Assignment 5.3: Optimizations, Concurrency & Database Defense
+
+## 1. In-memory filtering audit
+Command used: `Get-ChildItem -Recurse -Filter *.cs | Select-String "ToListAsync|IEnumerable"`
+
+**[FILL IN: list every hit: file, line, what it does, and whether I moved it into the query or left it, with the reason.]**
+
+The two paged endpoints (members, contributions) build an `IQueryable` and apply `Where`, `OrderBy` and `Take` before `ToListAsync`, so nothing is filtered or paged in C# after materialization.
+
+SQL captured from the EF Core command log for the contributions endpoint:
+```sql
+-- [FILL IN: paste the real SELECT ... WHERE ... ORDER BY ... LIMIT from the console log]
+```
+WHERE, ORDER BY and LIMIT appear in the SQL itself, which is the evidence that the work happens in PostgreSQL.
+
+## 2. Pagination contract
+| Property | Behaviour |
+|---|---|
+| Page size | Optional, default 20, maximum 100. A value above 100 is reduced to 100, not rejected. A negative value returns 400. A value of 0 uses the default. |
+| Page token | Opaque: base64 of a JSON object holding the last row's sort value, its Id, and a fingerprint of the sort and filter. Clients must treat it as a string. |
+| Next page token | `null` exactly when there are no more rows. The query fetches `pageSize + 1` rows; if the extra row exists there is a next page, and the extra row is dropped from the response. |
+| Token reuse | A token carries a fingerprint of the sort and filter that issued it. Reusing it with a different sort or filter returns 400. A malformed token also returns 400. |
+| Total count | **Not returned.** A `COUNT(*)` over a filtered table is a scan whose cost grows with the table, and a client paging forward doesn't need it. |
+
+**Keyset, not offset.** Suppose a client is on page 1 of contributions and a new contribution is inserted at the top while they browse. With offset paging (`Skip(20)`), every row shifts by one, so page 2 repeats a row the client already saw. With keyset paging the next page means "rows after this exact row", so an insert above it can't shift anything. With five contributions the two approaches behave the same in practice. With ten thousand, offset also gets slower with depth because PostgreSQL still walks and discards the skipped rows, while keyset seeks straight to the position through the index. The token is opaque, so I can change the implementation later without breaking clients.
+
+## 3. Sortable and filterable fields
+| Endpoint | Sort allow-list | Filter allow-list |
+|---|---|---|
+| Contributions | `RecordedAt`, `Amount`, each with `_asc` or `_desc` (default `RecordedAt_desc`) | `userId` |
+| Members | `JoinedAtUtc` ascending only | none |
+
+An unknown sort field or a malformed token returns a 400 problem response in the same shape as the rest of the API. Every sort ends with a unique tiebreaker (`Id` for contributions, `UserId` for members) so two rows with equal sort values can't swap order between page requests.
+
+**Refused:** sorting by member name. A contribution stores only a `UserId`, so sorting by name needs a join to Users on every page request for display order only.
+
+## 4. Seeded volume and EXPLAIN ANALYZE
+**[FILL IN: either the real result, or the honest status below.]**
+
+Status if not done: the volume seeder (`RondiTrack.SeedVolume`) is committed but did not build. Its own `Npgsql.EntityFrameworkCore.PostgreSQL` package reference pulled in EF Core 10.0.4, while `RondiTrack.Api` uses 10.0.12 (error CS1705). I did not capture the before and after plans and have not invented any numbers.
+
+The paging index is `IX_Contributions_StokvelId_RecordedAt_Id` on `(StokvelId, RecordedAt, Id)`:
+- `StokvelId` is first because it is the equality filter.
+- `RecordedAt` is second because it is the sort column, so PostgreSQL can read rows already in order, with no Sort node.
+- `Id` is third because it is the tiebreaker, so the index resolves ties itself.
+
+Before plan: **[FILL IN]**  After plan: **[FILL IN]**
+
+## 5. EXPLAIN ANALYZE on small development data
+**[FILL IN: paste the plan.]** With a handful of rows, PostgreSQL's planner is expected to choose a Seq Scan even with the index present. Reading a few rows from one page is cheaper than consulting an index and then fetching the rows from the table. That is a correct cost decision, not a bug.
+
+## 6. Composite unique constraint
+| Constraint | Rule | Where the rule already lives in C# |
+|---|---|---|
+| `UX_Contributions_Stokvel_User_Cycle` on `(StokvelId, UserId, ContributionCycleId)` | A member contributes once per cycle | `ContributionService.cs` line 72 calls `ExistsAsync` and returns `contribution.already_recorded` |
+
+Check run before applying the migration:
+```sql
+SELECT "StokvelId", "UserId", "ContributionCycleId", COUNT(*)
+FROM "Contributions"
+GROUP BY "StokvelId", "UserId", "ContributionCycleId"
+HAVING COUNT(*) > 1;
+```
+Result: **[FILL IN, e.g. "0 rows"]**
+
+Only one qualifying composite rule exists in my C#. I did not add a second constraint, because the brief forbids constraints for rules the code doesn't enforce (see section 13).
+
+## 7. What I checked when reading the migration
+Unlike 5.1 and 5.2, this migration contains only `CreateIndex` calls. I checked that there was no `AlterColumn`, `DropColumn` or `RenameColumn`, so it can't destroy data. The risks are different: a plain `CREATE UNIQUE INDEX` blocks writes to the table while it builds, and it fails if duplicates exist, which is why I queried first. On a large production table I would build the index with `CREATE INDEX CONCURRENTLY`, which EF's default migration does not do.
+
+## 8. Why the C# check and the constraint both stay
+The C# check gives a specific, friendly error (`contribution.already_recorded`) in the normal case. The constraint makes the rule true in the uncommon case: two requests passing the check at the same instant, a script, or a manual data fix. Deleting the check would turn every ordinary duplicate into a generic database error. Deleting the constraint would leave the rule holding only as long as every writer goes through my C#.
+
+## 9. xmin concurrency protection
+| Entity | Protected? | Reason |
+|---|---|---|
+| Payout | Yes, `uint Version` mapped with `IsRowVersion()` | Edited after creation |
+| Contribution | No | Never edited after creation |
+| StokvelMember | No | Never edited after creation |
+| User | **[DECISION NEEDED]** | Edited through PUT. Either add the same two lines or give a real reason. |
+| Stokvel | **[DECISION NEEDED]** | Edited through PUT. Same. |
+
+My first `xmin` migration generated an `AddColumn`, which would fail because `xmin` is a PostgreSQL system column. I removed it, corrected the mapping, and the regenerated migration is **[FILL IN: empty / hand-emptied]**.
+
+## 10. How the token travels
+`GET /api/payouts/{id}` returns the token as an `ETag` response header. `PUT /api/payouts/{id}` requires it back in an `If-Match` header, and a missing or invalid header returns 400. I chose the header approach because it is the standard HTTP mechanism, so any client or cache understands it. A stale token produces **409 Conflict** through the central exception handler, which maps `DbUpdateConcurrencyException`. I chose 409 because the API already uses 409 for "valid request, current state conflicts". 412 would also be defensible.
+
+Unique violations (SQLSTATE 23505) are mapped to 409 in the same handler, not in a controller try/catch.
+
+## 11. Tests
+| Test | Proves |
+|---|---|
+| `Database_rejects_duplicate_contribution_even_when_service_check_is_bypassed` | The constraint holds without the service check |
+| `Two_contexts_editing_the_same_payout_raise_DbUpdateConcurrencyException` | The raw EF mechanism. Two contexts are required because one context's identity map gives both readers the same object |
+| `Stale_If_Match_token_returns_409_problem_response` | The token survives the HTTP round trip |
+
+None use `Thread.Sleep`, `Task.Delay` or real parallelism. The order of operations is fixed in the test, so it is deterministic.
+
+Suite before: **[FILL IN: passed / failed]**  After: **[FILL IN]**
+
+What each failure exposed: **[FILL IN. Typical cases: a test expecting a plain array (the test was wrong, since "returns everything" was never promised); a PUT without `If-Match` (the change is right, update the test); leftover data colliding with the unique index (name it, or say none did).]**
+
+## 12. Definition of Done (new columns)
+| Endpoint | Paged in DB | Backed by constraint | Concurrency-protected |
+|---|---|---|---|
+| GET contributions | Yes | N/A (read) | N/A (read) |
+| POST contributions | N/A | Yes | N/A (never edited) |
+| GET members | Yes | N/A (read) | N/A (read) |
+| GET payout | N/A (single item) | N/A | Yes (returns ETag) |
+| PUT payout | N/A | N/A | Yes (xmin + If-Match) |
+
+## 13. Gaps not closed
+- One payout per cycle: no C# check exists, so no constraint was added.
+- One cycle label per stokvel: no C# check exists, so no constraint was added.
+- Unique email is a single-column check-then-act with no database constraint, so two simultaneous requests could both pass.
+- `Payout.Amount` has no update method, so the PUT sets it by reflection for demonstration. A proper `AdjustAmount` method is the fix.
+- 10,000-row volume and EXPLAIN ANALYZE plans: **[FILL IN: done / not done and why]**.
