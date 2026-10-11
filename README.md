@@ -470,3 +470,229 @@ What each failure exposed: **[FILL IN. Typical cases: a test expecting a plain a
 - Unique email is a single-column check-then-act with no database constraint, so two simultaneous requests could both pass.
 - `Payout.Amount` has no update method, so the PUT sets it by reflection for demonstration. A proper `AdjustAmount` method is the fix.
 - 10,000-row volume and EXPLAIN ANALYZE plans: **[FILL IN: done / not done and why]**.
+
+#### ## Assignment 5.4: Layered projects and real-database tests
+
+### 1. Project structure
+
+```
+RondiTrack.slnx
+  Domain/                    entities, Result, exceptions, repository interfaces. References nothing.
+  Infrastructure/            RondiTrackDbContext, EF migrations, in-memory and SQL repositories, SeedData.
+                             References Domain.
+  RondiTrack.Api/            controllers, DTOs, validators, services, exception handler, Program.cs.
+                             References Domain and Infrastructure.
+  RondiTrack.SeedVolume/     manual tool that inserts 12,000 contributions. Never run by the API.
+  RondiTrack.Api.Tests/      xUnit tests on a real PostgreSQL started by Testcontainers.
+```
+
+Dependency direction: **Api -> Infrastructure -> Domain**. Nothing points the other way.
+The Domain project has no `ProjectReference` and no `PackageReference`. Only `Program.cs`
+names concrete repository classes (`InMemory*Repository`, `SqlStokvelMemberRepository`);
+every other class depends on the interfaces in `RondiTrack.Domain.Repositories`.
+
+The folders are named `Domain` and `Infrastructure`, but the namespaces are
+`RondiTrack.Domain` and `RondiTrack.Infrastructure`, so the code keeps one consistent
+`RondiTrack.*` naming.
+
+### 2. What moved, and why
+
+| Moved | From -> To | Reason |
+|---|---|---|
+| Entities, `Result`, `ResultExtensions` | `RondiTrack.Api/Domain` -> `Domain` | The business rules must not know about HTTP or a database |
+| `NotFoundException`, `ConflictException`, `UnprocessableException`, `ValidationFailedException`, `IdempotencyKeyConflictException`, `RondiTrackException` | `RondiTrack.Api/Exceptions` -> `Domain/Exceptions` | `ResultExtensions.ThrowIfFailure()` in Domain throws them. Leaving them in the API would have made Domain depend on the API |
+| Repository interfaces, `IdempotencyRecord` | `RondiTrack.Api/Data` -> `Domain/Repositories` | The contract belongs to the code that uses it, not to the code that implements it |
+| `RondiTrackDbContext`, `InMemory*` repositories, `SqlStokvelMemberRepository`, `SeedData` | `RondiTrack.Api/Data` -> `Infrastructure/Data` | Storage details |
+| Migrations | `RondiTrack.Api/Migrations` -> `Infrastructure/Migrations` | Migrations follow the DbContext |
+
+`RondiTrackExceptionHandler` **stayed in the API**: it speaks HTTP (`ProblemDetails`,
+status codes) and handles Npgsql/EF exceptions, so it cannot live in Domain.
+During the move I had also moved it into `Domain/Exceptions` by accident (I moved the whole
+folder). I caught it because it uses ASP.NET and Npgsql, and moved it back.
+
+I also fixed a filename typo while moving: `SqlStokvelMemebrRepository.cs` is now
+`SqlStokvelMemberRepository.cs`.
+
+`ResultExtensions.cs` originally had `using RondiTrack.Api.Exceptions;`, which meant Domain
+depended on the API. Moving the exceptions into Domain removed that dependency.
+
+### 3. EF Core and the split
+
+- **Migrations assembly.** `RondiTrackDbContext` lives in Infrastructure, and EF uses the
+  DbContext's assembly for migrations by default, so `Program.cs` needs no `MigrationsAssembly`.
+- **`dotnet ef` needs a startup project.** `Microsoft.EntityFrameworkCore.Design` stays in
+  `RondiTrack.Api` (with `PrivateAssets=all`) because the API supplies the configuration.
+  Commands:
+  ```powershell
+  dotnet ef migrations list --no-connect -p Infrastructure -s RondiTrack.Api
+  dotnet ef migrations has-pending-model-changes -p Infrastructure -s RondiTrack.Api
+  ```
+- **Package versions are pinned to match.** `Microsoft.EntityFrameworkCore` and
+  `Microsoft.EntityFrameworkCore.Relational` are `10.0.12` in both Infrastructure and Api, next
+  to `Npgsql.EntityFrameworkCore.PostgreSQL` `10.0.3`. Without the explicit pins, a split
+  can produce error CS1705 (an assembly built against a newer EF than the one referenced).
+- **The model snapshot stores entity names as strings** (for example
+  `"RondiTrack.Api.Domain.Stokvel"`). When the namespace changed I rewrote those strings to
+  `RondiTrack.Domain.*` in the snapshot and in every `*.Designer.cs`. If one had been missed,
+  EF would believe every entity was new and the next migration would drop and recreate the tables.
+- **Migration safety check (empty-migration test).** After the split I ran
+  `dotnet ef migrations add SplitCheck -p Infrastructure -s RondiTrack.Api`, opened the file,
+  and removed it with `migrations remove`.
+  **[CONFIRM: write what you saw. It must say that both `Up` and `Down` were empty, and that
+  `has-pending-model-changes` reported no changes. If either was not empty, describe what was in it.]**
+- **SeedData in a class library.** Because `SeedData` now lives in Infrastructure (a class
+  library, which does not get the web SDK's implicit `using` lines), it has an explicit
+  `using Microsoft.Extensions.DependencyInjection;` for `GetRequiredService`.
+
+How the namespaces were fixed: one PowerShell script did literal text replacements
+(`namespace RondiTrack.Api.Domain;` -> `namespace RondiTrack.Domain;` and so on) on every moved
+file, so no file was edited by hand. I then checked three things: no file still mentions
+`RondiTrack.Api.Domain|Data|Migrations`; Domain contains no reference to the API,
+Infrastructure, EF Core, ASP.NET or Npgsql; and `RondiTrack.Api.Exceptions` appears only in
+`Program.cs` and the exception handler.
+
+### 4. Build result
+
+```
+dotnet build RondiTrack.slnx
+  Domain                 net10.0 succeeded
+  Infrastructure         net10.0 succeeded
+  RondiTrack.Api         net10.0 succeeded
+  RondiTrack.SeedVolume  net10.0 succeeded
+  RondiTrack.Api.Tests   net10.0 succeeded
+Build succeeded
+```
+
+### 5. Repository lifetimes
+
+| Registration | Lifetime | Reason |
+|---|---|---|
+| `IUserRepository`, `IStokvelRepository`, `IContributionRepository`, `IContributionCycleRepository` (all `InMemory*`) | Singleton | The data lives inside the object; a shorter lifetime would forget everything after each request |
+| `IIdempotencyStore` (`InMemoryIdempotencyStore`) | Singleton | Same reason; backed by a `ConcurrentDictionary`, safe across requests |
+| `IUserService`, `IMembershipService`, `IContributionService` | Singleton | They depend only on the Singletons above, so there is no captive dependency |
+| `RondiTrackDbContext` (`AddDbContext`) | Scoped (default) | Not thread-safe and holds a connection and change tracker; one per request |
+| `IStokvelMemberRepository` (`SqlStokvelMemberRepository`) | Scoped | It holds a `RondiTrackDbContext` |
+| FluentValidation validators | Scoped (library default) | Stateless, no conflict |
+| `RondiTrackExceptionHandler` | Singleton (framework default) | Its only dependency is `ILogger` |
+
+Rule applied: anything that holds or depends on a `DbContext` is **Scoped**; a **Singleton**
+must only depend on Singletons. A Singleton that received a Scoped service would keep it
+alive for the life of the app (a "captive dependency"), and ASP.NET Core rejects that in
+Development.
+
+I audited `Program.cs` against this rule and found **no violation, so no registration changed**.
+`MembershipService`, `UserService` and `ContributionService` take only the in-memory
+repositories. `IStokvelMemberRepository` is registered but no class asks for it yet.
+When `MembershipService` is switched to it, `MembershipService` must become Scoped.
+
+A test (`Every_registered_dependency_resolves_without_lifetime_errors`) resolves every
+registered dependency from a scope in the Development environment, so a future captive
+dependency fails the test run.
+
+### 6. Tests on a real PostgreSQL (Testcontainers)
+
+Design (implemented in `RondiTrack.Api.Tests`):
+
+- `PostgresApiFactory` extends `WebApplicationFactory<Program>` and implements `IAsyncLifetime`.
+  It starts a `postgres:17-alpine` container with `Testcontainers.PostgreSql`, applies the real
+  EF migrations with `Database.MigrateAsync()`, and overrides the connection string with
+  `builder.UseSetting("ConnectionStrings:RondiTrack", ...)`.
+- `UseSetting` is used, not `ConfigureAppConfiguration`, because `Program.cs` reads the
+  connection string while it is still building services, before `ConfigureAppConfiguration`
+  callbacks run.
+- RondiTrack's `Program.cs` does not migrate on startup, so the factory does it.
+- One container is shared by every test class through a collection fixture
+  (`[Collection("Postgres collection")]`), because starting a container takes seconds.
+- **No test uses `UseInMemoryDatabase`.** In-memory EF does not enforce foreign keys or
+  composite keys, so it would hide exactly what 5.2 was about.
+
+Tests:
+
+| Test | What it proves |
+|---|---|
+| `App_uses_the_container_database_and_all_migrations_are_applied` | The app's connection string is the container's, and all six migrations ran |
+| `Every_registered_dependency_resolves_without_lifetime_errors` | The lifetime table in section 5 is true |
+| `Unknown_payout_returns_404_problem_json_from_the_database` | A real database query, with the RFC 9457 error shape |
+| `Registering_a_user_returns_201_and_the_user_can_be_read_back` | A normal request end to end |
+| `Duplicate_membership_is_rejected_by_the_composite_key_in_real_PostgreSQL` | The `(StokvelId, UserId)` key from 5.2 is enforced by the database, using two DbContexts so the second knows nothing about the first row |
+
+#### Test results, honestly
+
+**The tests could not run on my machine.** Docker Desktop on this computer reports
+`Docker Desktop is unable to start` (the Docker engine does not start, which on Windows
+usually means WSL 2 or virtualization is not available). This is the same reason my 5.1
+README says I use a native PostgreSQL install instead of Docker.
+
+What I do have:
+
+```
+dotnet build RondiTrack.slnx   -> Build succeeded (all 5 projects, including the test project)
+dotnet test  RondiTrack.slnx   -> Test summary: total: 5, failed: 5, succeeded: 0
+```
+
+All five failures have the same single cause, thrown from the `PostgresApiFactory`
+constructor before any test body ran:
+
+```
+DotNet.Testcontainers.Builders.DockerUnavailableException:
+  Docker API responded with status code='ServiceUnavailable',
+  response='Docker Desktop is unable to start'
+```
+
+So the failures say nothing about the code under test; they show that Docker is unavailable
+here. I have **not** verified that the five tests pass, and I have not run the "development
+database switched off" proof. I did not replace the container with an in-memory database to
+make the run go green, because that would defeat the purpose of the assignment.
+
+To verify on a machine where Docker works (a classmate's laptop, a CI runner, or GitHub
+Codespaces):
+
+```powershell
+git clone <repo-url>
+cd RondiTrack
+docker version           # needs both Client and Server sections
+dotnet test RondiTrack.slnx
+```
+
+Expected: `Passed! - Failed: 0, Passed: 5`. To prove the tests do not touch the development
+database, stop the local PostgreSQL service and run `dotnet test` again; the result must not change.
+
+```
+BEFORE the split:                 [CONFIRM: your earlier test summary, or "no tests existed in the repository"]
+AFTER, on a Docker-capable host:  [FILL IN if you manage to run it; otherwise delete this line]
+```
+
+### 7. Definition of Done (extended for 5.4)
+
+| Item | Status |
+|---|---|
+| Domain, Infrastructure and Api are separate projects with the dependency direction above | Yes (build succeeded) |
+| Domain has no project or package references | Yes |
+| Only `Program.cs` names concrete repositories | Yes |
+| Migrations moved with the DbContext, snapshot strings rewritten | Yes |
+| Empty-migration check after the split | **[CONFIRM]** |
+| Repository lifetimes audited and documented | Yes |
+| Tests use a real PostgreSQL through Testcontainers | Written; **not run** (Docker unavailable on my machine) |
+| Tests proven independent of the development database | **Not done** (same reason) |
+
+### 8. Gaps I chose not to close
+
+- **Tests not run.** See section 6. This is the main gap, and it is an environment problem,
+  not a code problem.
+- **Two data stores.** Users, stokvels, contributions and cycles are still in-memory Singletons.
+  Only `StokvelMember` has a PostgreSQL repository, and nothing calls it yet. This is why a
+  stokvel that exists only in memory returns 404 from an endpoint that queries PostgreSQL
+  (for example the paged members list), even though a row exists in psql. 5.4 deliberately
+  does not change behaviour, so I left it. It needs fixing before authorization work (6.1).
+- **`IPayoutService` implementation.** **[CONFIRM: if your `PayoutService` class exists, say so and
+  say it is registered Scoped. If not, keep this sentence:]** `IPayoutService` has no
+  implementation and is not registered, so `POST /api/stokvels/{id}/cycles/{id}/payout` fails at
+  runtime until a Scoped `PayoutService` is added.
+- **Contributions controller.** **[CONFIRM: say that `StokvelContributionsController` contains the real
+  contributions endpoints again. In the zip I received it contained the members code.]**
+- **Secrets.** **[CONFIRM: say that the connection string is now in user-secrets and that the old
+  database password was changed. If not, keep this sentence:]** `appsettings.json` still contains a
+  database connection string with a password, which must move to user-secrets.
+- **Membership is not enforced by a database foreign key.** `Contribution` has a foreign key to
+  `Users` but not a composite foreign key `(StokvelId, UserId)` to `StokvelMember`, so the rule that a
+  contributor must be a member is enforced in application code only (carried over from 5.2).
