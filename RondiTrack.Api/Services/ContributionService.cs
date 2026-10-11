@@ -1,7 +1,7 @@
 using System.Text.Json;
 using RondiTrack.Api.Contracts;
-using RondiTrack.Api.Data;
-using RondiTrack.Api.Domain;
+using RondiTrack.Domain.Repositories;
+using RondiTrack.Domain;
 
 namespace RondiTrack.Api.Services;
 

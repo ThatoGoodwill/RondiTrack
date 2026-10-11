@@ -1,5 +1,5 @@
 using RondiTrack.Api.Contracts;
-using RondiTrack.Api.Domain;
+using RondiTrack.Domain;
 
 namespace RondiTrack.Api.Services;
 

@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
-using RondiTrack.Api.Data;
-using RondiTrack.Api.Domain;
-using RondiTrack.Api.Exceptions;
+using RondiTrack.Domain.Repositories;
+using RondiTrack.Domain;
+using RondiTrack.Domain.Exceptions;
 
 namespace RondiTrack.Api.Controllers;
 

@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
-using RondiTrack.Api.Data;
+using RondiTrack.Domain.Repositories;
+using RondiTrack.Infrastructure.Data;
 using RondiTrack.Api.Exceptions;
 using RondiTrack.Api.OpenApi;
 using RondiTrack.Api.Services;
@@ -43,7 +44,7 @@ builder.Services.AddSingleton<IContributionService, ContributionService>();
 
 
 
-builder.Services.AddDbContext<RondiTrack.Api.Data.RondiTrackDbContext>(options =>
+builder.Services.AddDbContext<RondiTrackDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("RondiTrack")));
 
 builder.Services.AddScoped<IStokvelMemberRepository, SqlStokvelMemberRepository>();

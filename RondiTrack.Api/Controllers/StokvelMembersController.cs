@@ -2,9 +2,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Api.Contracts;
-using RondiTrack.Api.Data;
-using RondiTrack.Api.Domain;
-using RondiTrack.Api.Exceptions;
+using RondiTrack.Domain.Repositories;
+using RondiTrack.Infrastructure.Data;
+using RondiTrack.Domain;
+using RondiTrack.Domain.Exceptions;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Services.Paging;
 

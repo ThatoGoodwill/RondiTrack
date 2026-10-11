@@ -1,6 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc.Filters;
-using RondiTrack.Api.Exceptions;
+using RondiTrack.Domain.Exceptions;
 
 namespace RondiTrack.Api.Validators;
 

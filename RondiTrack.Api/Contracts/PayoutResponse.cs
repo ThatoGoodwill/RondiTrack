@@ -1,4 +1,4 @@
-using RondiTrack.Api.Domain;
+using RondiTrack.Domain;
 namespace RondiTrack.Api.Contracts;
 public sealed record PayoutResponse(Guid Id, Guid StokvelId, Guid ContributionCycleId, Guid RecipientUserId,
  decimal Amount, DateTimeOffset ProcessedAt)

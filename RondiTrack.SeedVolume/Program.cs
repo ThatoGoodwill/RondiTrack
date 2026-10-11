@@ -1,6 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
-using RondiTrack.Api.Data;
-using RondiTrack.Api.Domain;
+using Microsoft.EntityFrameworkCore;
+using RondiTrack.Infrastructure.Data;
+using RondiTrack.Domain;
 
 // Run manually with: dotnet run --project RondiTrack.SeedVolume -- "<your connection string>"
 // NEVER wired into RondiTrack.Api's own Program.cs -- this only runs when YOU explicitly invoke it.
@@ -46,7 +46,7 @@ await context.SaveChangesAsync();
 foreach (var user in users)
 {
     if (!await context.StokvelMembers.AnyAsync(m => m.StokvelId == stokvel.Id && m.UserId == user.Id))
-        context.StokvelMembers.Add(RondiTrack.Api.Domain.StokvelMember.Create(stokvel.Id, user.Id));
+        context.StokvelMembers.Add(StokvelMember.Create(stokvel.Id, user.Id));
 }
 await context.SaveChangesAsync();
 

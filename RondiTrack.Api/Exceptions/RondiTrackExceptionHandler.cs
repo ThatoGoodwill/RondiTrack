@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using RondiTrack.Domain.Exceptions;
 
 namespace RondiTrack.Api.Exceptions;
 
