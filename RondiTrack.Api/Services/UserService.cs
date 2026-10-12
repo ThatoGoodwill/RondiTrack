@@ -1,5 +1,5 @@
-using RondiTrack.Domain.Repositories;
 using RondiTrack.Domain;
+using RondiTrack.Domain.Repositories;
 
 namespace RondiTrack.Api.Services;
 
@@ -40,9 +40,12 @@ public sealed class UserService(IUserRepository users, IStokvelRepository stokve
             return Result<User>.Failure(EmailTaken());
 
         var result = user.Update(firstName, lastName, email, dateOfBirth);
-       if (!result.IsSuccess) return Result<User>.Failure(result.Error);
-await users.AddAsync(user, ct);   // harmless no-op for already-tracked entities against EF Core; triggers SaveChanges
-return Result<User>.Success(user);
+        if (!result.IsSuccess) return Result<User>.Failure(result.Error);
+
+        // 6.1: the user is TRACKED by EF Core, so Update() already changed it in memory. Saving is
+        // all that is left. (The old code called AddAsync here, which would try to INSERT it again.)
+        await users.SaveChangesAsync(ct);
+        return Result<User>.Success(user);
     }
 
     public async Task<Result> DeleteUserAsync(Guid id, CancellationToken ct = default)

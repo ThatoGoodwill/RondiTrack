@@ -5,6 +5,8 @@ using RondiTrack.Domain.Repositories;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using RondiTrack.Api.Authorization;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -14,6 +16,7 @@ namespace RondiTrack.Api.Controllers;
 //   - business rules -> decided by UserService, arriving here as a Result
 //   - failures       -> THROWN (ThrowIfFailure / throw new ...), answered by the handler
 // ---------------------------------------------------------------------------------
+[Authorize(Policy = Policies.PlatformAdmin)]
 [ApiController]
 [Route("api/users")]
 public class UsersController(IUserRepository users, IUserService userService) : ApiControllerBase

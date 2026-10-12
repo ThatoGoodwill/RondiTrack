@@ -8,6 +8,7 @@ using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Services.Paging;
+using RondiTrack.Api.Authorization;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -89,6 +90,7 @@ public class StokvelMembersController(
     }
 
     [HttpPost]
+    [StokvelAccess(Policies.StokvelChairperson)]
     [EndpointSummary("Add a member to a stokvel")]
     [ProducesResponseType<MembershipResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -103,6 +105,7 @@ public class StokvelMembersController(
     }
 
     [HttpDelete("{userId:guid}")]
+    [StokvelAccess(Policies.StokvelChairperson)]
     [EndpointSummary("Remove a member from a stokvel")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
