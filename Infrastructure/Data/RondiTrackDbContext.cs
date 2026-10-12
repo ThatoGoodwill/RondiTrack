@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Domain;
-using RondiTrack.Domain.Repositories;
 
 namespace RondiTrack.Infrastructure.Data;
 
@@ -12,6 +11,7 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
     public DbSet<ContributionCycle> ContributionCycles => Set<ContributionCycle>();
     public DbSet<Contribution> Contributions => Set<Contribution>();
     public DbSet<Payout> Payouts => Set<Payout>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();   // 6.1
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,7 +23,9 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(u => u.LastName).HasMaxLength(User.MaxNameLength).IsRequired();
             entity.Property(u => u.Email).IsRequired();
             entity.Property(u => u.CreatedAt);
-            entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.PasswordHash).IsRequired();      // 6.1: "" = cannot sign in
+            entity.Property(u => u.IsPlatformAdmin);                 // 6.1: platform-level flag
+            entity.HasIndex(u => u.Email).IsUnique();               // also what stops two "Lerato@x.com" registrations
         });
 
         // ---- Stokvel + its real members collection ----
@@ -111,6 +113,27 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(p => p.ProcessedAt);
             entity.Property(p => p.Amount).HasPrecision(18, 2);
             entity.Property(p => p.Version).IsRowVersion();
+        });
+
+        // ---- RefreshToken (6.1) ----
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();   // SHA-256 as hex = 64 chars
+            entity.Property(t => t.CreatedAt);
+            entity.Property(t => t.ExpiresAt);
+            entity.Property(t => t.RevokedAt);
+            entity.Property(t => t.ReplacedByTokenId);
+            entity.Property(t => t.Version).IsRowVersion();                    // xmin, like Payout
+
+            // Lookups: by hash (every refresh) and by family (reuse detection).
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => t.FamilyId);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
