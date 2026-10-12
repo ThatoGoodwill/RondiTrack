@@ -46,6 +46,11 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
 
         switch (exception)
         {
+            case AuthenticationFailedException e:
+                status = StatusCodes.Status401Unauthorized; code = e.Code; detail = e.Message; break;
+
+            case ForbiddenException e:
+                status = StatusCodes.Status403Forbidden; code = e.Code; detail = e.Message; break;
             case NotFoundException e:
                 status = StatusCodes.Status404NotFound; code = e.Code; detail = e.Message; break;
 
