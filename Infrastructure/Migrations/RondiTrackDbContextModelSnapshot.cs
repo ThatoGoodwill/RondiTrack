@@ -57,7 +57,7 @@ namespace RondiTrack.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Contributions_Stokvel_User_Cycle");
 
-                    b.ToTable("Contributions", (string)null);
+                    b.ToTable("Contributions");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.ContributionCycle", b =>
@@ -86,7 +86,7 @@ namespace RondiTrack.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ContributionCycles", (string)null);
+                    b.ToTable("ContributionCycles");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.Payout", b =>
@@ -119,7 +119,54 @@ namespace RondiTrack.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Payouts", (string)null);
+                    b.ToTable("Payouts");
+                });
+
+            modelBuilder.Entity("RondiTrack.Domain.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FamilyId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.Stokvel", b =>
@@ -148,7 +195,7 @@ namespace RondiTrack.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Stokvels", (string)null);
+                    b.ToTable("Stokvels");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.StokvelMember", b =>
@@ -171,7 +218,7 @@ namespace RondiTrack.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("StokvelMembers", (string)null);
+                    b.ToTable("StokvelMembers");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.User", b =>
@@ -195,17 +242,24 @@ namespace RondiTrack.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("IsPlatformAdmin")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.Contribution", b =>
@@ -223,6 +277,15 @@ namespace RondiTrack.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("RondiTrack.Domain.RefreshToken", b =>
+                {
+                    b.HasOne("RondiTrack.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("RondiTrack.Domain.StokvelMember", b =>

@@ -4,6 +4,7 @@ using RondiTrack.Api.Contracts;
 using RondiTrack.Domain.Repositories;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
+using RondiTrack.Api.Authorization;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -38,6 +39,7 @@ public class ContributionCyclesController(
     }
 
     [HttpPost]
+    [StokvelAccess(Policies.StokvelTreasurer)]
     [EndpointSummary("Create a contribution cycle")]
     [EndpointDescription("Defines a new collection period for this stokvel, e.g. \"2026-09\" with a target amount.")]
     [ProducesResponseType<ContributionCycleResponse>(StatusCodes.Status201Created)]
@@ -56,6 +58,7 @@ public class ContributionCyclesController(
     }
 
     [HttpPut("{id:guid}")]
+    [StokvelAccess(Policies.StokvelTreasurer)]
     [EndpointSummary("Replace a contribution cycle")]
     [EndpointDescription("Replaces a cycle's label and target amount.")]
     [ProducesResponseType<ContributionCycleResponse>(StatusCodes.Status200OK)]
@@ -66,10 +69,12 @@ public class ContributionCyclesController(
     {
         var cycle = await GetCycleOrThrow(stokvelId, id, ct);
         cycle.Update(request.Label, request.TargetAmount).ThrowIfFailure();
+        await cycles.SaveChangesAsync(ct);
         return Ok(ContributionCycleResponse.FromEntity(cycle));
     }
 
     [HttpDelete("{id:guid}")]
+    [StokvelAccess(Policies.StokvelTreasurer)]
     [EndpointSummary("Delete a contribution cycle")]
     [EndpointDescription("Deletes a contribution cycle.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

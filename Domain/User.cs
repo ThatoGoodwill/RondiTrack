@@ -35,6 +35,23 @@ public sealed class User
     public DateOnly DateOfBirth { get; private set; }
     public DateTimeOffset CreatedAt { get; }
 
+    // 6.1: the PasswordHasher<User> output (salt + algorithm + hash in one string). Never the password.
+    // Empty means "this account cannot sign in" (e.g. users created through POST /api/users).
+    public string PasswordHash { get; private set; } = string.Empty;
+
+    // 6.1: a PLATFORM-level fact (can this person administer the whole app?). It is NOT a stokvel role.
+    // Stokvel roles live on StokvelMember, per stokvel.
+    public bool IsPlatformAdmin { get; private set; }
+
+    public void SetPasswordHash(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+            throw new ArgumentException("A password hash is required.", nameof(passwordHash));
+        PasswordHash = passwordHash;
+    }
+
+    public void GrantPlatformAdmin() => IsPlatformAdmin = true;
+
     // The ONLY door into existence.
     public static Result<User> Create(string? firstName, string? lastName, string? email, DateOnly dateOfBirth)
     {
