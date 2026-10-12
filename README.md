@@ -696,3 +696,117 @@ AFTER, on a Docker-capable host:  [FILL IN if you manage to run it; otherwise de
 - **Membership is not enforced by a database foreign key.** `Contribution` has a foreign key to
   `Users` but not a composite foreign key `(StokvelId, UserId)` to `StokvelMember`, so the rule that a
   contributor must be a member is enforced in application code only (carried over from 5.2).
+
+  # Assignment 6.1: Authentication & Stokvel-Scoped Authorization
+
+## 1. Tokens: lifetimes, ClockSkew, claims
+
+| Setting | Value | Why |
+|---|---|---|
+| Access token lifetime | **10 minutes** (`Jwt:AccessTokenMinutes`; startup rejects anything above 15) | Short enough that a stolen token dies quickly, long enough that the frontend is not refreshing every minute. |
+| Refresh token lifetime | **7 days**, rotated on every use | A returning user does not retype a password every day, but each token works only once. |
+| `ClockSkew` | **30 seconds** | The default is 5 minutes, which would quietly turn a 10-minute token into a 15-minute one. 30 s still absorbs ordinary clock drift between servers. |
+| Signing algorithm | HMAC-SHA256 only (`ValidAlgorithms`) | The token's own `alg` header never chooses how it is verified. |
+
+**Claims in the access token, and why each is safe to be up to 10 minutes stale:**
+
+| Claim | Meaning | Why staleness is harmless |
+|---|---|---|
+| `sub` | the user's id | A user id never changes. |
+| `jti` | unique token id | Random; carries no authority. |
+| `role` | platform role: `User` or `PlatformAdmin` | Changes rarely. If a platform admin is demoted, the worst case is 10 more minutes of access, and the token cannot be refreshed past that because refresh re-reads the user. |
+| `iss`, `aud`, `iat`, `nbf`, `exp` | standard validation fields | Fixed at issue time. |
+
+No email, no name and **no stokvel role** is in the token. I decoded the payload of a real login token and it contains exactly `aud`, `iss`, `exp`, `iat`, `nbf`, `sub`, `jti` and `role`, with `exp` ten minutes after `iat`.
+
+## 2. Refresh cookie flags and frontend advice
+
+| Flag | Value | Reason |
+|---|---|---|
+| `HttpOnly` | on | JavaScript cannot read the cookie, so an XSS bug cannot steal the refresh token. |
+| `Secure` | on | The cookie is only ever sent over HTTPS. (Run the `https` launch profile locally.) |
+| `SameSite` | `Strict` | The browser never sends it on a request another site triggers, which blocks CSRF against `/api/auth/refresh`. |
+| `Path` | `/api/auth` | Sent only to register/login/refresh/logout, never with ordinary API calls, so it travels far less often. |
+| `Expires` | the token's expiry | Matches the server-side expiry. |
+
+Observed on a real login response: `Set-Cookie: refresh_token=<value>; expires=<7 days later>; path=/api/auth; secure; samesite=strict; httponly`.
+
+**Advice to the frontend team:** keep the **access token in memory only** (a JavaScript variable). When the page reloads, call `POST /api/auth/refresh`: the browser sends the cookie by itself and you get a new access token. Never put either token in `localStorage`. Anything in `localStorage` is readable by every script on the page, so one XSS bug (a compromised npm package, an injected ad) lets an attacker copy a 7-day refresh token and use it from their own machine, long after the user closes the tab. With the `HttpOnly` cookie, the same bug can still make requests from the user's browser while the page is open, but it cannot carry the token away. If the access token were in `localStorage` the loss would be smaller (10 minutes), but it is the same mistake, and in-memory costs the frontend only one refresh call on page load.
+
+## 3. Reuse detection
+
+Every login starts a **family** of refresh tokens. Each refresh spends the presented token (`RevokedAt` is set) and issues a successor in the same family. If a token that is already spent or revoked is presented again, the server cannot tell whether the real user's app replayed it or an attacker stole an old copy, so it **revokes every token in the family** (one `UPDATE ... WHERE FamilyId = ... AND RevokedAt IS NULL`) and returns 401.
+
+**What the legitimate user experiences:** their next refresh fails with 401 (`auth.refresh_reused`), the frontend sends them to the sign-in page, and they log in again, which starts a fresh family. The attacker's copy, and the user's own newer token, are both dead. The cost is one extra login; the benefit is that a stolen token can be used at most once before it is noticed.
+
+Two simultaneous refreshes of the same token are guarded by PostgreSQL's `xmin`: only one `UPDATE` can win, the other receives 409.
+
+I checked this by hand (section 9): replaying the old cookie returned 401 `auth.refresh_reused`, and the newer cookie issued by the first refresh was then rejected as well.
+
+## 4. Authorization matrix
+
+Cells are the HTTP status returned. "Treasurer/chair" shows Treasurer first, then Chairperson (stored as role `Admin`) where they differ. Unauthenticated callers get **401** on everything except register, login, refresh, logout and the docs.
+
+| Endpoint | Non-member | Member | Treasurer / Chair | Platform admin |
+|---|---|---|---|---|
+| `POST /api/auth/register`, `login`, `refresh`, `logout` | anonymous | anonymous | anonymous | anonymous |
+| `GET /api/stokvels` (list all) | 403 | 403 | 403 | 200 |
+| `POST /api/stokvels` | 201 (becomes chair) | 201 | 201 | 201 |
+| `GET /api/stokvels/{id}` | 404 | 200 | 200 | 200 |
+| `PUT` / `DELETE /api/stokvels/{id}` | 404 | 403 | 403 / 200 or 204 | 200 / 204 |
+| `GET .../members`, `GET .../members/{userId}` | 404 | 200 | 200 | 200 |
+| `POST` / `DELETE .../members` | 404 | 403 | 403 / 201 or 204 | 201 / 204 |
+| `GET .../cycles`, `GET .../cycles/{id}` | 404 | 200 | 200 | 200 |
+| `POST` / `PUT` / `DELETE .../cycles` | 404 | 403 | 201, 200, 204 | 201, 200, 204 |
+| `GET .../contributions` | 404 | 200 | 200 | 200 |
+| `POST .../contributions` (own) | 404 | 201 | 201 | 201 |
+| `POST .../contributions` (someone else's) | 404 | 403 | 201 | 201 |
+| `POST .../cycles/{cycleId}/payout` | 404 | 403 | 201 (409 if the business rules refuse) | 201 |
+| `GET /api/payouts/{id}` | 404 | 200 | 200 | 200 |
+| `PUT /api/payouts/{id}` | 404 | 403 | 200 | 200 |
+| `GET/POST/PUT/DELETE /api/users...` | 403 | 403 | 403 | 200 |
+
+The matrix comes from the attributes and handlers in the code and is exercised by `StokvelAuthorizationTests`. By hand I have verified only the unauthenticated 401 (section 9). **[CONFIRM: after running the 404/403/201 checks in section 9, state here that they matched, or correct the cells that did not.]**
+
+## 5. Why 404 for non-members and 403 for members without the role
+
+A **non-member** asking about a stokvel is asking a question they have no right to ask: "does this stokvel exist?" Answering 403 would say "yes, it exists, you just can't touch it", which leaks that a private savings group with that id exists. So the answer is the same 404 (same `type`, `title` and message) that a stokvel that never existed gets, and a test checks they match.
+
+A **member without the role** already knows the stokvel exists, because they belong to it. A 404 would hide nothing and would only confuse them ("the page I was just looking at is gone?"). 403 tells them precisely what is true: you are in, but your role does not allow this.
+
+The same rule is applied to payouts: `GET /api/payouts/{id}` returns `payout.not_found` to a non-member of that payout's stokvel, never a 403.
+
+Login follows the same principle: an unknown email and a wrong password return the identical 401 and take the same time (a dummy hash is verified when the email is unknown). The one place the API still reveals whether an email has an account is registration (409 on a duplicate), because the assignment requires it; rate limiting is listed under gaps.
+
+## 6. Why the per-stokvel role is not in the token
+
+A token is a **snapshot**: whatever it says stays true, as far as the API is concerned, until it expires. A stokvel role is a fact about a person **in one stokvel**, and it changes while the token is alive: if the chairperson removes the treasurer at 10:00, a token issued at 09:58 would still say "Treasurer" until 10:08, and that person could still process a payout at 10:04. Money cannot wait for a token to expire.
+
+It also cannot fit: Lerato is Treasurer of her burial society and a plain Member of her work club, with one login. A single `role` claim cannot say both, and a list of roles per stokvel would be stale in every entry.
+
+So the token says only who you are (and your platform role). Every stokvel request reads the caller's `StokvelMember` row from PostgreSQL in `StokvelRoleHandler`. Cost: one indexed primary-key lookup per request. Benefit: a role change takes effect on the very next request. A test proves it: a treasurer's token creates a cycle (201), the role is changed to Member in the database, and the **same token** gets 403.
+
+## 7. Role-based vs policy-based, using this code
+
+**Role check (used exactly once):** `[Authorize(Roles = PlatformRoles.PlatformAdmin)]` on `GET /api/stokvels` in `StokvelsController`.
+- *If the rule changed* ("support staff may list stokvels too"): edit that attribute to name a second role, and every other endpoint that needs the same rule would need the same edit. With one use that is fine; with ten it is ten places and easy to miss one.
+- Good for: a single, simple, platform-level rule that will not grow.
+
+**Policy-based (everywhere else):** controllers say `[StokvelAccess(Policies.StokvelTreasurer)]` or `[Authorize(Policy = Policies.PlatformAdmin)]`; the rule lives in `Program.cs` and the handlers.
+- *If the rule changed* ("a Treasurer may no longer process payouts, only the chairperson"): change `[StokvelAccess(Policies.StokvelTreasurer)]` to `StokvelChairperson` on one action, or change what a policy means in one place in `Program.cs`, and every endpoint using it follows. No controller contains a role name.
+- Also the only option for rules that need data: "Treasurer **of this stokvel**" needs a database lookup per stokvel, which a role string in an attribute cannot express.
+
+## 8. Log excerpt (no secrets)
+
+**dotnet run --project RondiTrack.Api --lauofile https\thato\OneDrive\Desktop\RondiTrack\RondiTrack> 
+Using launch settings from RondiTrack.Api\Properties\launchSettings.json...
+Building...
+fail: Microsoft.EntityFrameworkCore.Database.Command[20102]
+      Failed executing DbCommand (109ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "MigrationId", "ProductVersion"
+      FROM "__EFMigrationsHistory"
+      ORDER BY "MigrationId";
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (61ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]**
