@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -48,7 +48,7 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
     [Fact]
     public async Task Unknown_payout_returns_404_problem_json_from_the_database()
     {
-        var client = factory.CreateClient();
+        var client = factory.CreateAdminClient();
 
         var response = await client.GetAsync($"/api/payouts/{Guid.NewGuid()}");
 
@@ -61,7 +61,7 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
     [Fact]
     public async Task Registering_a_user_returns_201_and_the_user_can_be_read_back()
     {
-        var client = factory.CreateClient();
+        var client = factory.CreateAdminClient();
         var request = new
         {
             firstName = "Thandi",

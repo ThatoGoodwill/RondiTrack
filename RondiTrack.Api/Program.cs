@@ -8,10 +8,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using RondiTrack.Api.Auth;
 using RondiTrack.Api.Authorization;
 using RondiTrack.Api.Exceptions;
 using RondiTrack.Api.OpenApi;
+using RondiTrack.Api.Observability;
 using RondiTrack.Api.Seeding;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Validators;
@@ -165,6 +171,33 @@ builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
         context.ProblemDetails.Extensions["correlationId"] = context.HttpContext.TraceIdentifier);
+
+// ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
+//   Logs   answer "what happened to this request?"      (ILogger, as before)
+//   Traces answer "where did the time go?"               (one span per request + one per SQL command + our own)
+//   Metrics answer "how often, and is it getting worse?" (counters with small, fixed tag sets)
+// Everything is labelled "ronditrack-api". Nothing leaves the process unless OTEL_EXPORTER_OTLP_ENDPOINT is set,
+// so tests and CI never need a dashboard.
+var openTelemetry = builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("ronditrack-api"))
+    .WithTracing(tracing =>
+    {
+        // One span per incoming request, except the platform's health probes (they would bury real traffic).
+        tracing.AddAspNetCoreInstrumentation(options =>
+            options.Filter = httpContext => !httpContext.Request.Path.StartsWithSegments("/health"));
+        tracing.AddNpgsql();                                  // one child span per SQL command (placeholders, never values)
+        tracing.AddProcessor(new QueryStringRedactionProcessor());   // URL query strings can carry page tokens (= amounts)
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();               // request rate, errors, duration
+        metrics.AddMeter("System.Runtime");                   // GC, thread pool, CPU (built into .NET)
+    })
+    .WithLogging();                                           // every ILogger call is ALSO sent to OpenTelemetry
+
+// Export over OTLP ONLY when the standard environment variable is set (launchSettings.json sets it for `dotnet run`).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+    openTelemetry.UseOtlpExporter();
 
 var app = builder.Build();
 

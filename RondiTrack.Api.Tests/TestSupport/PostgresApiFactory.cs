@@ -32,6 +32,8 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         .Build();
 
     public async Task InitializeAsync() => await _container.StartAsync();
+    // Exposed for tests that need to prove the DbContext is talking to the container.
+    public string ConnectionString => _container.GetConnectionString();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
