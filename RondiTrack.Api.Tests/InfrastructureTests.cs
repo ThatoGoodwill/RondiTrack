@@ -19,11 +19,12 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
 
-        Assert.Equal(factory.ConnectionString, db.Database.GetConnectionString());
+       Assert.Equal(factory.ConnectionString, db.Database.GetConnectionString());
 
-        var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
-        Assert.Equal(6, applied.Count);
-        Assert.EndsWith("_AddPayoutXminToken", applied[^1]);
+var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+// Every migration that exists in code must have been applied to this container.
+var expected = db.Database.GetMigrations().OrderBy(m => m).ToList();
+Assert.Equal(expected, applied.OrderBy(m => m).ToList());
     }
 
     [Fact]
