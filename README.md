@@ -810,3 +810,445 @@ info: Microsoft.EntityFrameworkCore.Database.Command[20101]
       Executed DbCommand (61ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
       SELECT 1
 info: Microsoft.EntityFrameworkCore.Database.Command[20101]**
+
+## # RondiTrack
+
+A stokvel management API built with ASP.NET Core, EF Core and PostgreSQL.
+
+This README covers the full project. Section 6.2 documents the observability,
+POPIA-compliant telemetry, and health-probe work added in Assignment 6.2.
+
+---
+
+## 1. Overview
+
+RondiTrack is a REST API for managing stokvels: creating groups, adding members,
+recording contributions, tracking contribution cycles, and processing payouts.
+
+Built for a fictitious South African stokvel, RondiTrack demonstrates:
+
+- Clean architecture with Domain / Infrastructure / API separation
+- Full authentication using JWT access tokens + rotating refresh tokens
+  (`HttpOnly`, `Secure`, `SameSite=Strict` cookie)
+- Fine-grained authorization (platform admin, stokvel member, treasurer,
+  chairperson) via policy-based handlers
+- Result-based error handling in the domain, converted to `problem+json` at the
+  API boundary
+- Centralized exception handling with a single correlation id per request
+- Observability: traces, metrics and logs — with no personal data in any of them
+
+---
+
+## 2. Tech stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | .NET 10 |
+| Web | ASP.NET Core, controllers, Scalar for OpenAPI UI |
+| Data | PostgreSQL 17, Npgsql, EF Core 10 |
+| Auth | JWT (HS256), `IPasswordHasher<User>` |
+| Validation | FluentValidation, global `ValidationFilter` |
+| Telemetry | OpenTelemetry (traces, metrics, logs) + OTLP exporter |
+| Tests | xUnit, Testcontainers.PostgreSQL, WebApplicationFactory |
+
+---
+
+## 3. Getting started (developer machine)
+
+### Prerequisites
+
+- .NET 10 SDK
+- PostgreSQL 17 (or a Docker container running Postgres)
+- Node.js (only if you want to run the Aspire Dashboard)
+- Docker Desktop (only if you want to run the test suite locally — the tests use
+  Testcontainers)
+
+### Configuration
+
+Secrets are never committed. Set them with user-secrets:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:RondiTrack" "Host=localhost;Port=5432;Database=ronditrack;Username=ronditrack_app;Password=<your-db-password>" --project RondiTrack.Api
+dotnet user-secrets set "Jwt:SigningKey" "<64-char random string>" --project RondiTrack.Api
+dotnet user-secrets set "SeedUsers:Password" "<seed password>" --project RondiTrack.Api
+```
+
+### Run
+
+```powershell
+dotnet run --project RondiTrack.Api --launch-profile https
+```
+
+The API listens on `https://localhost:7154` and `http://localhost:5019`.
+
+In development, the seeder creates demo users and 3 stokvels, provided
+`SeedUsers:Password` is set. The seeder skips if `Users` is not empty.
+
+---
+
+## 4. Domain model
+
+| Entity | Purpose |
+|---|---|
+| `User` | Account, password hash, platform-admin flag |
+| `Stokvel` | A group; has members, cycles, contributions, payouts |
+| `StokvelMember` | Join table with role (`Member`, `Treasurer`, `Admin`) |
+| `ContributionCycle` | A period during which members contribute |
+| `Contribution` | A single contribution by a member to a cycle |
+| `Payout` | A disbursement from a cycle to a recipient |
+| `RefreshToken` | Rotating refresh token, hashed, with reuse detection |
+
+Domain results use a small `Result<T>` type; API handlers convert `Error`
+values into `problem+json` responses with stable error codes
+(e.g. `stokvel.not_found`, `payout.already_processed`).
+
+---
+
+## 5. API surface
+
+Full OpenAPI is available at `/scalar` in development.
+
+| Group | Endpoint |
+|---|---|
+| Auth | `POST /api/auth/register`, `/login`, `/refresh`, `/logout` |
+| Users | `GET /api/users/{id}` |
+| Stokvels | `GET/POST /api/stokvels`, `GET /api/stokvels/{id}` |
+| Members | `GET/POST/DELETE /api/stokvels/{id}/members`, `PATCH .../members/{userId}/role` |
+| Cycles | `GET/POST /api/stokvels/{id}/cycles` |
+| Contributions | `GET/POST /api/stokvels/{id}/contributions` (paged) |
+| Payouts | `POST /api/stokvels/{id}/cycles/{cycleId}/payout`, `GET /api/stokvels/{id}/payouts/{id}` |
+| Health | `GET /health/live`, `GET /health/ready` |
+
+All endpoints require a bearer token except:
+`POST /api/auth/*`, `/health/*`, and the OpenAPI/Scalar endpoints (dev only).
+
+---
+
+## 6. Assignment 6.2 — Observability & POPIA-Compliant Telemetry
+
+This section documents the observability work added in 6.2.
+
+### 6.1 Commits
+
+| Commit | What it does |
+|---|---|
+| Add OpenTelemetry tracing, metrics and logging | ASP.NET Core, Npgsql, OTLP export; service name `ronditrack-api`; blanks URL query strings on spans. |
+| Remove duplicate SQL logging and set per-environment levels | SQL commands logged once; `Warning` in production, `Information` in development. |
+| Use W3C trace id as correlationId on every problem response | Every 4xx/5xx returns and logs the W3C trace id, whatever path raised it. |
+| Add RondiTrack business metrics | Five counters on a `Meter` named `RondiTrack`. |
+| Add payout.process span | A business-named span wrapping the payout operation; SQL spans nest underneath. |
+| Fix POPIA findings in logs and 5xx responses | Level = responsibility; 5xx responses carry no internal detail; security events log user ids, never emails. |
+| Add liveness and readiness probes with timeout | `/health/live`, `/health/ready`; anonymous; readiness capped at 3 s. |
+| Add observability, log-leak and metric tests | 13 tests proving the above; a `CapturingLoggerProvider` and a `MeterListener`. |
+
+### 6.2 Tracing
+
+- **Service name:** `ronditrack-api`.
+- **Spans:** one per incoming request (excluding `/health/*`), one per SQL command
+  (via `Npgsql.OpenTelemetry`), plus our own business span `payout.process`.
+- **URL query strings are redacted.** The contributions list is paged with
+  `?pageToken=...`; when sorted by amount, the token carries the last amount on
+  the page. A span stores the URL query, so without redaction an amount would
+  reach the dashboard. Path stays; query is dropped.
+- **Correlation ID = W3C trace id.** If the caller sends `traceparent`, that id
+  is used. Otherwise ASP.NET Core generates one. Every error path (our exception
+  handler, the JwtBearer 401/403 events, and the framework's bare 4xx via
+  `UseStatusCodePages`) returns it as `X-Correlation-Id` and as `correlationId`
+  in the problem+json body.
+
+#### Example — 401 with caller-supplied trace id
+
+Request:
+
+```powershell
+curl.exe -k -i -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" `
+  https://localhost:7154/api/stokvels/00000000-0000-0000-0000-000000000001
+```
+
+Response (abridged):
+
+```
+HTTP/1.1 401 Unauthorized
+X-Correlation-Id: 4bf92f3577b34da6a3ce929d0e0e4736
+
+{"type":"urn:ronditrack:error:auth.unauthenticated","title":"auth.unauthenticated",
+ "status":401,"detail":"Authentication is required to access this resource.",
+ "instance":"/api/stokvels/00000000-0000-0000-0000-000000000001",
+ "correlationId":"4bf92f3577b34da6a3ce929d0e0e4736"}
+```
+
+#### The `payout.process` span
+
+Wrapped by `InstrumentedPayoutService`. Tags:
+
+| Tag | When | Why |
+|---|---|---|
+| `ronditrack.stokvel.id` | always | which stokvel |
+| `ronditrack.cycle.id` | always | which cycle |
+| `ronditrack.payout.outcome` | always | one of 8 fixed values |
+| `ronditrack.payout.id` | success only | link to the record |
+| `error.type` | unexpected exception only | exception type name, never the message |
+
+No amount, recipient, name, email, or bank detail is ever attached.
+
+Screenshot of a successful payout trace, with `payout.process` expanded and its
+SQL spans nested under it: `docs/images/payout-trace.png`.
+
+### 6.3 Metrics
+
+Meter name: **`RondiTrack`**, registered via `metrics.AddMeter("RondiTrack")`.
+
+| Counter | Tag | Distinct values |
+|---|---|---|
+| `ronditrack.contributions.recorded` | none | 1 series |
+| `ronditrack.payouts.processed` | `outcome` | 8 |
+| `ronditrack.authorization.refusals` | `result` | `not_found`, `forbidden` |
+| `ronditrack.auth.sign_ins` | `outcome` | `success`, `failure` |
+| `ronditrack.auth.refresh_token_reuse` | none | 1 series |
+
+No telemetry code lives in any controller. Contributions are counted by
+`InstrumentedContributionService`; sign-ins and token reuse in `AuthService`;
+authorization refusals in `StokvelAccessChecker`.
+
+### 6.4 Logging and POPIA
+
+Rules applied:
+
+1. **Level follows responsibility.** A 5xx is our fault → `Error`, with the full
+   exception. A 4xx is the client's mistake → `Information`, with the exception
+   **type** and our fixed error code. Never the message.
+2. **A 500 tells the client nothing internal.** Body = fixed sentence +
+   `correlationId` to quote.
+3. **Security events log our own user id, never the email:**
+   - failed sign-in → `Information`, two variants:
+     - `"Sign-in failed: no account matches the submitted email."`
+     - `"Sign-in failed: credentials rejected for user {UserId}."`
+   - refresh-token reuse → `Warning`
+   - authorization refusal:
+     - not a member → `Warning` (probing or stale link; also counted)
+     - role too low → `Information` (ordinary button press)
+4. **Framework 401/403** (which never reach our handler) write one `Information`
+   line with the correlation id and our error code.
+
+#### Per-environment SQL level
+
+- Production: `Microsoft.EntityFrameworkCore.Database.Command` = `Warning`.
+- Development: = `Information`.
+
+**Why:** at `Information`, every query is logged, which costs storage, buries
+real problems, and is one more place data can leak. At `Warning`, only failed
+commands are logged — exactly the ones someone must read. Parameter values are
+never printed (`@p0='?'`) because `EnableSensitiveDataLogging` is never called.
+
+#### Audit — every logger call and thrown message
+
+Generated with:
+
+```powershell
+Find-Cs "\.Log(Trace|Debug|Information|Warning|Error|Critical)\(|ILogger" |
+    Where-Object { $_.Path -notmatch "Tests" }
+Find-Cs "throw new|Failure\(new Error" |
+    Where-Object { $_.Path -notmatch "Tests" }
+```
+
+| Location | Level | Message | Contains PII? |
+|---|---|---|---|
+| `AuthService.cs:55` | Info | `User registered. UserId={UserId}` | No |
+| `AuthService.cs:72` | Info | `Sign-in failed: no account matches the submitted email.` | No |
+| `AuthService.cs:74` | Info | `Sign-in failed: credentials rejected for user {UserId}.` | No |
+| `AuthService.cs:83` | Info | `Login succeeded. UserId=… FamilyId=…` | No |
+| `AuthService.cs:103` | **Warning** | `Refresh token reuse detected; family revoked. UserId=… FamilyId=…` | No |
+| `AuthService.cs:120` | Info | `Refresh token rotated. UserId=… FamilyId=…` | No |
+| `AuthService.cs:132` | Info | `Logout. UserId=… FamilyId=…` | No |
+| `AuthorizationRefusals.cs:17` | Info | refusal line with correlation id + code | No |
+| `StokvelAccessChecker.cs:47` | **Warning** | not-a-member refusal | No |
+| `StokvelAccessChecker.cs:57` | Info | role-too-low refusal | No |
+| `ProblemResponseWriter.cs:30` | Info | `Request {CorrelationId} …` for JwtBearer 401/403 | No |
+| `RondiTrackExceptionHandler.cs:104` | **Error** | 5xx with full exception | No |
+| `RondiTrackExceptionHandler.cs:110` | Info | 4xx with exception type + code | No |
+| `DevelopmentSeeder.cs:19` | Info | `SeedUsers:Password is not set; skipping demo data.` | No |
+| `DevelopmentSeeder.cs:71` | Info | `Demo data created (7 users, 3 stokvels).` | No |
+
+Exception messages thrown via `throw new …` are the fixed strings defined in the
+domain and API; none contains client-submitted data. Result-style failures use
+`Failure(new Error(type, code, message))` with fixed `code` values and fixed
+messages.
+
+#### Log excerpt — login (development)
+
+```
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[@normalized='?'], CommandType='Text', CommandTimeout='30']
+      SELECT u."Id", …, u."PasswordHash"
+      FROM "Users" AS u
+      WHERE u."Email" = @normalized
+      LIMIT 1
+info: RondiTrack.Api.Exceptions.RondiTrackExceptionHandler[0]
+      Request 2cb087ec36d772d5a6a021b9ef607146 rejected with 401 (auth.invalid_credentials, AuthenticationFailedException)
+```
+
+#### Log excerpt — non-member 404
+
+```
+info: RondiTrack.Api.Exceptions.RondiTrackExceptionHandler[0]
+      Request <trace-id> rejected with 404 (stokvel.not_found, NotFoundException)
+info: RondiTrack.Api.Authorization.RondiTrack.Authorization[0]
+      Authorization refusal (not_found) for stokvel <id> by user <id>. CorrelationId=<trace-id>
+```
+
+#### Log excerpt — successful payout
+
+```
+info: RondiTrack.Api.Services.PayoutService[0]
+      Payout processed. PayoutId=<id> StokvelId=<id> CycleId=<id>
+```
+
+#### Verified — no leaks
+
+Ran the app; registered a user; logged in with a wrong password; logged in
+correctly; refreshed; triggered a 409 (duplicate register); requested a stokvel
+the user is not a member of. Searched the console for the email, password, and
+any `eyJ`-prefixed string — none appeared. The 409 logged as `info`, not `fail`.
+
+### 6.5 Health probes
+
+| Endpoint | Checks | Cap | Anonymous | Body |
+|---|---|---|---|---|
+| `/health/live` | none | — | yes | `Healthy` or `Unhealthy` only |
+| `/health/ready` | `AddDbContextCheck<RondiTrackDbContext>` | 3 s | yes | `Healthy` or `Unhealthy` only |
+
+No check names, no connection string, no version numbers are returned. Both
+endpoints are `.AllowAnonymous()` because the 6.1 fallback policy would
+otherwise answer 401. `/health/*` is excluded from tracing.
+
+#### Readiness timings with PostgreSQL stopped
+
+Measured with:
+
+```powershell
+Measure-Command { curl.exe -k -s -o NUL -w "%{http_code}`n" https://localhost:7154/health/ready } |
+    Select-Object TotalSeconds
+```
+
+| Condition | `/health/ready` | `/health/live` | Elapsed |
+|---|---|---|---|
+| **Before cap** (`Health__DatabaseTimeoutSeconds=0`) | 503 | 200 | `[FILL IN]` s |
+| **After cap** (`Health__DatabaseTimeoutSeconds=3`, default) | 503 | 200 | `[FILL IN]` s |
+
+
+
+The app recovers without a restart once PostgreSQL is back: `/health/ready`
+returns 200 immediately.
+
+### 6.6 Tests
+
+13 new tests in `ObservabilityTests.cs`, using:
+
+- `CapturingLoggerProvider` — an `ILoggerProvider` that remembers every log entry.
+- `MeterRecorder` — a built-in `MeterListener` (no extra package).
+- `PostgresApiFactory` — the 6.1 factory plus a `Logs` property; no dashboard,
+  no dev database (Testcontainers starts its own PostgreSQL).
+
+| Test | Proves |
+|---|---|
+| Liveness / Readiness answer without a token and say only `Healthy` | probes are anonymous and uninformative |
+| A 404 for a non-member returns the caller's trace id and logs it | one id in response, header, and log lines |
+| An anonymous 401 returns the caller's trace id and logs it | same, for the framework's 401 |
+| Without a `traceparent`, the correlation id is still a 32-hex trace id | not `0HNP…:00000001` |
+| Nothing sensitive reaches the logs, and a 409 is not an error | register, login, refresh, contribution `1234.56`, duplicate 409: no email, password, token, or amount in any entry; no `Error` for the 409 |
+| A failed sign-in is logged without the typed email | both variants, our own id only |
+| Refresh-token reuse is a Warning naming our user id and no token | |
+| Processing a payout is counted with outcome `success` | metric test |
+| A refused payout is counted `already_processed` and its span ends in Error | |
+| The payout span carries only the tags we chose | |
+| Authorization refusals are counted by result | `not_found` and `forbidden` |
+| A new contribution is counted, an idempotent replay is not | |
+
+#### Where the suite was run
+
+`dotnet test` could not run on the developer machine used for this assignment,
+because Testcontainers requires Docker and Docker is not available there. The
+suite was therefore run **on GitHub Actions** (`.github/workflows/tests.yml`),
+which has Docker and **no development database at all** — proving the suite does
+not depend on one.
+
+Result: all 44 tests passed on GitHub Actions (Ubuntu runner, `dotnet test RondiTrack.slnx --configuration Release`) on 2026-10-15.
+### 6.7 Final checks
+
+- `Find-Cs "EnableSensitiveDataLogging"` → no results.
+- `git status` clean; no `reg.json`, `login.json`, `cookies.txt`, or secrets
+  committed.
+- The pre-6.1 database password has been rotated.
+- The Aspire Dashboard is **never** deployed: it is anonymous and laptop-only.
+
+### 6.8 What this section deliberately does not claim
+
+- No telemetry result is described that was not actually observed on this
+  machine or in the CI run recorded above.
+- Local `dotnet test` was **not** run to completion on the dev machine — see 6.6.
+- `EnableRetryOnFailure` was **not** enabled in this repository, so the readiness
+  timing story is the "no retry loop" one, not the class-demo one.
+
+---
+
+## 7. Running the test suite
+
+The suite uses **Testcontainers**, so it needs a working Docker daemon. If Docker
+is available:
+
+```powershell
+dotnet test
+```
+
+Every test class in the `Postgres collection` shares a single PostgreSQL
+container and a single database across the run.
+
+If Docker is not available on your machine, the suite is also run in CI on
+GitHub Actions; see `.github/workflows/tests.yml`.
+
+---
+
+## 8. Repository layout
+
+```
+RondiTrack/
+├── Domain/                       — entities, Result<T>, Error
+├── Infrastructure/               — EF Core DbContext, repositories, migrations
+├── RondiTrack.Api/               — controllers, auth, validators, observability
+│   ├── Auth/                     — AuthService, TokenService, JwtOptions
+│   ├── Authorization/            — policies, handlers, refusals
+│   ├── Exceptions/               — RondiTrackExceptionHandler, ProblemResponseWriter
+│   ├── Observability/            — Correlation, QueryStringRedactionProcessor,
+│   │                              RondiTrackMetrics, RondiTrackTelemetry
+│   ├── Seeding/                  — DevelopmentSeeder
+│   └── Services/                 — ContributionService, PayoutService,
+│                                  InstrumentedContributionService,
+│                                  InstrumentedPayoutService
+├── RondiTrack.Api.Tests/         — xUnit tests + PostgresApiFactory
+├── docs/
+│   └── images/
+│       └── payout-trace.png      — screenshot of the payout.process span
+└── .github/workflows/tests.yml   — CI test run
+```
+
+---
+
+## 9. Security notes
+
+- Never paste DB passwords, JWT signing keys, or connection strings into a chat.
+  Rotate any value that leaks.
+- `EnableSensitiveDataLogging` is never enabled — parameter values are always
+  `@p0='?'`.
+- The refresh token is stored only as a SHA-256 hash.
+- The refresh cookie is `HttpOnly`, `Secure`, `SameSite=Strict`, scoped to
+  `/api/auth`.
+- Failed sign-in responses are identical for "unknown email" and "wrong
+  password" so an attacker cannot enumerate accounts.
+- All request-scoped errors carry a W3C trace id in `X-Correlation-Id` and in
+  the JSON body, so a user can quote one id and support can find the exact trace.
+
+---
+
+## 10. License
+
+Educational project — not for production use.
