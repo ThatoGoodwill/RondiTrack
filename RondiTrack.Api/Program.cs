@@ -8,10 +8,19 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Npgsql;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RondiTrack.Api.Auth;
 using RondiTrack.Api.Authorization;
 using RondiTrack.Api.Exceptions;
 using RondiTrack.Api.OpenApi;
+using RondiTrack.Api.Observability;
 using RondiTrack.Api.Seeding;
 using RondiTrack.Api.Services;
 using RondiTrack.Api.Validators;
@@ -106,8 +115,13 @@ builder.Services
                     expired ? "Your access token has expired. Refresh it and try again."
                             : "Authentication is required to access this resource.");
             },
-            OnForbidden = context => ProblemResponseWriter.WriteAsync(context.HttpContext,
-                StatusCodes.Status403Forbidden, "auth.forbidden", "You do not have permission to perform this action.")
+            OnForbidden = context =>
+            {
+                // 6.2: a 403 from the platform-role check is an authorization refusal too: count and log it.
+                AuthorizationRefusals.ReportForbidden(context.HttpContext);
+                return ProblemResponseWriter.WriteAsync(context.HttpContext,
+                    StatusCodes.Status403Forbidden, "auth.forbidden", "You do not have permission to perform this action.");
+            }
         };
     });
 
@@ -137,6 +151,9 @@ builder.Services.AddScoped<IAuthorizationHandler, RecordContributionHandler>();
 builder.Services.AddScoped<StokvelAccessChecker>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
+// 6.2: the business counters (one Meter for the whole API). Singleton: counters are created once and shared.
+builder.Services.AddSingleton<RondiTrackMetrics>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
@@ -156,15 +173,66 @@ builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 // Services depend on Scoped repositories, so they are Scoped too.
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IMembershipService, MembershipService>();
-builder.Services.AddScoped<IContributionService, ContributionService>();
-builder.Services.AddScoped<IPayoutService, PayoutService>();   // KEEP YOUR OWN line for the payout service (5.3); lifetime must be Scoped
+// 6.2: ContributionService does the work; the Instrumented wrapper counts each NEW contribution.
+builder.Services.AddScoped<ContributionService>();
+builder.Services.AddScoped<IContributionService>(sp => new InstrumentedContributionService(
+    sp.GetRequiredService<ContributionService>(), sp.GetRequiredService<RondiTrackMetrics>()));
+// 6.2: PayoutService does the work; the Instrumented wrapper owns the payout.process span and the payout counter.
+builder.Services.AddScoped<PayoutService>();
+builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
+    sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
 
 // ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
-        context.ProblemDetails.Extensions["correlationId"] = context.HttpContext.TraceIdentifier);
+        // 6.2: the framework's own 401/403/404 bodies carry the SAME id as our handler's: the W3C trace id.
+        context.ProblemDetails.Extensions["correlationId"] = Correlation.GetId(context.HttpContext));
+
+// ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
+//   Logs   answer "what happened to this request?"      (ILogger, as before)
+//   Traces answer "where did the time go?"               (one span per request + one per SQL command + our own)
+//   Metrics answer "how often, and is it getting worse?" (counters with small, fixed tag sets)
+// Everything is labelled "ronditrack-api". Nothing leaves the process unless OTEL_EXPORTER_OTLP_ENDPOINT is set,
+// so tests and CI never need a dashboard.
+var openTelemetry = builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("ronditrack-api"))
+    .WithTracing(tracing =>
+    {
+        // One span per incoming request, except the platform's health probes (they would bury real traffic).
+        tracing.AddAspNetCoreInstrumentation(options =>
+            options.Filter = httpContext => !httpContext.Request.Path.StartsWithSegments("/health"));
+        tracing.AddNpgsql();                                  // one child span per SQL command (placeholders, never values)
+        tracing.AddSource(RondiTrackTelemetry.ActivitySourceName);   // our own payout.process span
+        tracing.AddProcessor(new QueryStringRedactionProcessor());   // URL query strings can carry page tokens (= amounts)
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();               // request rate, errors, duration
+        metrics.AddMeter("System.Runtime");                   // GC, thread pool, CPU (built into .NET)
+        metrics.AddMeter(RondiTrackMetrics.MeterName);        // our business counters: a meter nobody registers records into the void
+    })
+    .WithLogging();                                           // every ILogger call is ALSO sent to OpenTelemetry
+
+// Export over OTLP ONLY when the standard environment variable is set (launchSettings.json sets it for `dotnet run`).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+    openTelemetry.UseOtlpExporter();
+
+// ---- Health checks (6.2): liveness runs NO checks, readiness checks PostgreSQL ----
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<RondiTrackDbContext>("database", tags: ["ready"]);
+
+// A slow answer is an unhealthy answer: cap every check. Health:DatabaseTimeoutSeconds = 0 removes the cap
+// (only for the "before" measurement in the README).
+var databaseTimeoutSeconds = builder.Configuration.GetValue("Health:DatabaseTimeoutSeconds", 3);
+builder.Services.Configure<HealthCheckServiceOptions>(options =>
+{
+    foreach (var registration in options.Registrations)
+        registration.Timeout = databaseTimeoutSeconds > 0
+            ? TimeSpan.FromSeconds(databaseTimeoutSeconds)
+            : Timeout.InfiniteTimeSpan;
+});
 
 var app = builder.Build();
 
@@ -198,6 +266,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();   // who are you?
 app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
 app.MapControllers();
+
+// The platform has no token, so the probes opt out of the fallback policy. They return ONLY "Healthy" or "Unhealthy".
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") })
+    .AllowAnonymous();
 
 app.Run();
 

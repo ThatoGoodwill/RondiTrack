@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using RondiTrack.Api.Auth;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Repositories;
@@ -24,13 +25,18 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public const string DefaultPassword = "Correct-Horse-Battery-1";
     private static readonly string TestSigningKey = Convert.ToBase64String(Guid.NewGuid().ToByteArray().Concat(Guid.NewGuid().ToByteArray()).ToArray());
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:17")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17")
         .WithDatabase("ronditrack_test")
         .WithUsername("postgres")
         .WithPassword(Guid.NewGuid().ToString("N"))
         .Build();
 
+    
+    // 6.2: EVERY log line the app writes during the run is kept here, so a test can prove nothing sensitive was logged.
+   
+    public CapturingLoggerProvider Logs { get; } = new();
+    // Exposed so tests can build their own DbContext against the same container database.
+    public string ConnectionString => _container.GetConnectionString();
     public async Task InitializeAsync() => await _container.StartAsync();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -40,6 +46,11 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:RondiTrack", _container.GetConnectionString());
         builder.UseSetting("Jwt:SigningKey", TestSigningKey);
         // SeedUsers:Password is deliberately NOT set: the demo seeder skips, so every test starts from an empty database.
+
+        // 6.2: one extra logger provider that remembers everything the app logs (see CapturingLoggerProvider).
+        // OTEL_EXPORTER_OTLP_ENDPOINT is deliberately NOT set either: telemetry is collected and sent nowhere,
+        // so these tests never need the dashboard.
+        builder.ConfigureLogging(logging => logging.AddProvider(Logs));
     }
 
     async Task IAsyncLifetime.DisposeAsync() => await _container.DisposeAsync();

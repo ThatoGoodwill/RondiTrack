@@ -811,6 +811,7 @@ info: Microsoft.EntityFrameworkCore.Database.Command[20101]
       SELECT 1
 info: Microsoft.EntityFrameworkCore.Database.Command[20101]**
 
+### # RondiTrack
 ## # RondiTrack
 
 A stokvel management API built with ASP.NET Core, EF Core and PostgreSQL.
@@ -1135,6 +1136,13 @@ Measure-Command { curl.exe -k -s -o NUL -w "%{http_code}`n" https://localhost:71
 | **Before cap** (`Health__DatabaseTimeoutSeconds=0`) | 503 | 200 | `[FILL IN]` s |
 | **After cap** (`Health__DatabaseTimeoutSeconds=3`, default) | 503 | 200 | `[FILL IN]` s |
 
+ a stopped local PostgreSQL refuses the connection immediately,
+and because this repo does **not** call `EnableRetryOnFailure`, there is no retry
+loop to slow it down. Explain what the cap still protects against: a database
+that is reachable but not answering (frozen server, silently dropped packets,
+exhausted connection pool), where a connection attempt waits for Npgsql's
+default 15-second connect timeout — far longer than a platform's probe window
+(Kubernetes' default is 1 s). A slow answer is an unhealthy answer.]`
 
 
 The app recovers without a restart once PostgreSQL is back: `/health/ready`

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using RondiTrack.Api.Contracts;
+using RondiTrack.Api.Observability;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Domain.Repositories;
@@ -20,6 +21,7 @@ public sealed class AuthService(
     TokenService tokenService,
     IOptions<JwtOptions> options,
     TimeProvider clock,
+    RondiTrackMetrics metrics,
     ILogger<AuthService> logger)
 {
     // Hashed once at startup. Used when the email does not exist (or the account has no password),
@@ -63,7 +65,14 @@ public sealed class AuthService(
 
         if (user is null || string.IsNullOrEmpty(user.PasswordHash) || verification == PasswordVerificationResult.Failed)
         {
-            logger.LogWarning("Login failed.");
+            // Information, not Warning: one typo is normal life. A SPIKE is what matters, and the sign-ins counter shows it.
+            // The typed email is NEVER logged (it may belong to a person who has nothing to do with us);
+            // an account that exists is identified by our own id only.
+            if (user is null)
+                logger.LogInformation("Sign-in failed: no account matches the submitted email.");
+            else
+                logger.LogInformation("Sign-in failed: credentials rejected for user {UserId}.", user.Id);
+            metrics.SignInAttempted(succeeded: false);
             throw BadCredentials();
         }
 
@@ -72,6 +81,7 @@ public sealed class AuthService(
         await refreshTokens.AddAsync(refreshToken, ct);
 
         logger.LogInformation("Login succeeded. UserId={UserId} FamilyId={FamilyId}", user.Id, refreshToken.FamilyId);
+        metrics.SignInAttempted(succeeded: true);
         return Issue(user, rawToken, refreshToken);
     }
 
@@ -92,6 +102,7 @@ public sealed class AuthService(
             await refreshTokens.RevokeFamilyAsync(current.FamilyId, now, ct);
             logger.LogWarning("Refresh token reuse detected; family revoked. UserId={UserId} FamilyId={FamilyId}",
                 current.UserId, current.FamilyId);
+            metrics.RefreshTokenReuseDetected();
             throw new AuthenticationFailedException("auth.refresh_reused", "Refresh token was already used. Please sign in again.");
         }
 

@@ -1,0 +1,17 @@
+name: tests
+
+# Runs the whole suite on a GitHub-hosted Linux runner. That runner has Docker (Testcontainers starts its own
+# PostgreSQL) and NO development database at all, so a green run proves the tests do not depend on one.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test RondiTrack.slnx --configuration Release --verbosity normal

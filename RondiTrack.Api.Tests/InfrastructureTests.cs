@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -19,11 +19,12 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
 
-        Assert.Equal(factory.ConnectionString, db.Database.GetConnectionString());
+       Assert.Equal(factory.ConnectionString, db.Database.GetConnectionString());
 
-        var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
-        Assert.Equal(6, applied.Count);
-        Assert.EndsWith("_AddPayoutXminToken", applied[^1]);
+var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+// Every migration that exists in code must have been applied to this container.
+var expected = db.Database.GetMigrations().OrderBy(m => m).ToList();
+Assert.Equal(expected, applied.OrderBy(m => m).ToList());
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
     [Fact]
     public async Task Unknown_payout_returns_404_problem_json_from_the_database()
     {
-        var client = factory.CreateClient();
+        var client = factory.CreateAdminClient();
 
         var response = await client.GetAsync($"/api/payouts/{Guid.NewGuid()}");
 
@@ -61,7 +62,7 @@ public sealed class InfrastructureTests(PostgresApiFactory factory)
     [Fact]
     public async Task Registering_a_user_returns_201_and_the_user_can_be_read_back()
     {
-        var client = factory.CreateClient();
+        var client = factory.CreateAdminClient();
         var request = new
         {
             firstName = "Thandi",

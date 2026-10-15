@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using RondiTrack.Api.Observability;
 
 namespace RondiTrack.Api.Exceptions;
 
@@ -9,7 +10,8 @@ public static class ProblemResponseWriter
 {
     public static Task WriteAsync(HttpContext httpContext, int status, string code, string detail)
     {
-        var correlationId = httpContext.TraceIdentifier;
+        // 6.2: the correlation id IS the W3C trace id (the caller's, if they sent a traceparent header).
+        var correlationId = Correlation.GetId(httpContext);
 
         var problem = new ProblemDetails
         {
@@ -20,6 +22,12 @@ public static class ProblemResponseWriter
             Instance = httpContext.Request.Path
         };
         problem.Extensions["correlationId"] = correlationId;
+
+        // The framework's 401/403 never pass through RondiTrackExceptionHandler, so this is their log line: the SAME
+        // shape, the SAME correlation id, and only our fixed error code. Never the token, never the message.
+        httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(ProblemResponseWriter).FullName!)
+            .LogInformation("Request {CorrelationId} rejected with {Status} ({Code})", correlationId, status, code);
 
         httpContext.Response.StatusCode = status;
         httpContext.Response.Headers["X-Correlation-Id"] = correlationId;
