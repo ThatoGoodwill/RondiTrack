@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using RondiTrack.Api.Observability;
 
 namespace RondiTrack.Api.Exceptions;
 
@@ -9,7 +10,8 @@ public static class ProblemResponseWriter
 {
     public static Task WriteAsync(HttpContext httpContext, int status, string code, string detail)
     {
-        var correlationId = httpContext.TraceIdentifier;
+        // 6.2: the correlation id IS the W3C trace id (the caller's, if they sent a traceparent header).
+        var correlationId = Correlation.GetId(httpContext);
 
         var problem = new ProblemDetails
         {
@@ -20,6 +22,7 @@ public static class ProblemResponseWriter
             Instance = httpContext.Request.Path
         };
         problem.Extensions["correlationId"] = correlationId;
+
 
         httpContext.Response.StatusCode = status;
         httpContext.Response.Headers["X-Correlation-Id"] = correlationId;

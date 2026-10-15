@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using RondiTrack.Api.Observability;
 using RondiTrack.Domain.Exceptions;
 
 namespace RondiTrack.Api.Exceptions;
@@ -10,13 +11,12 @@ namespace RondiTrack.Api.Exceptions;
 // =================================================================================
 // THE ONE CENTRALIZED EXCEPTION HANDLER.
 //
-// This is now the ONLY place in the whole API that decides:
-//     "which exception  ->  which HTTP status code  ->  which response body".
-// No controller builds a ProblemDetails or picks a status code any more.
+// This is the ONLY place in the whole API that decides:
+//     "which exception  ->  which HTTP status code  ->  which response body  ->  which log line".
+// No controller builds a ProblemDetails or picks a status code.
 //
-// How it is used:  Program.cs registers it (AddExceptionHandler) and turns it on
-// (UseExceptionHandler). From then on, ANY exception thrown ANYWHERE in a request
-// (a controller, a service, the validation filter) lands in TryHandleAsync below.
+// Program.cs registers it (AddExceptionHandler) and turns it on (UseExceptionHandler). From then on, ANY
+// exception thrown ANYWHERE in a request (a controller, a service, a filter) lands in TryHandleAsync below.
 // =================================================================================
 public sealed class RondiTrackExceptionHandler : IExceptionHandler
 {
@@ -31,14 +31,13 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
         HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         // ---- CORRELATION ID ----------------------------------------------------
-        // ASP.NET Core already gives every request a unique id. We put the SAME id
-        // in (a) the log line, (b) the response body, (c) a response header.
-        // That lets you take an id from a user's error and find the exact log line.
-        var correlationId = httpContext.TraceIdentifier;
+        // 6.2: the request's W3C TRACE ID (the caller's, if they sent a traceparent header). The SAME value goes in
+        // (a) the log line, (b) the response body, (c) a response header, and it is the trace's own id in the dashboard.
+        var correlationId = Correlation.GetId(httpContext);
 
         // ---- MAP EXCEPTION -> STATUS ------------------------------------------
-        // Order matters only when one class inherits another. ConflictException also
-        // matches IdempotencyKeyConflictException (its child), so it becomes 409 too.
+        // Order matters only when one class inherits another. ConflictException also matches
+        // IdempotencyKeyConflictException (its child), so that one becomes 409 too.
         object? fieldErrors = null;
         int status;
         string code;
@@ -46,13 +45,14 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
 
         switch (exception)
         {
-            case AuthenticationFailedException e:
-                status = StatusCodes.Status401Unauthorized; code = e.Code; detail = e.Message; break;
-
-            case ForbiddenException e:
-                status = StatusCodes.Status403Forbidden; code = e.Code; detail = e.Message; break;
             case NotFoundException e:
                 status = StatusCodes.Status404NotFound; code = e.Code; detail = e.Message; break;
+
+            case AuthenticationFailedException e:           // 6.1: wrong password, unknown email, bad refresh token
+                status = StatusCodes.Status401Unauthorized; code = e.Code; detail = e.Message; break;
+
+            case ForbiddenException e:                      // 6.1: a member whose role is not enough
+                status = StatusCodes.Status403Forbidden; code = e.Code; detail = e.Message; break;
 
             case ConflictException e:                       // includes IdempotencyKeyConflictException
                 status = StatusCodes.Status409Conflict; code = e.Code; detail = e.Message; break;
@@ -73,17 +73,17 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
                     .ToDictionary(g => g.Key, g => g.Select(x => x.ErrorMessage).ToArray());
                 break;
 
-                case DbUpdateConcurrencyException:
-                      status = StatusCodes.Status409Conflict;
-                      code = "concurrency.stale_version";
-                      detail = "This record was modified by someone else since you last read it. Fetch it again and retry.";
+            case DbUpdateConcurrencyException:
+                status = StatusCodes.Status409Conflict;
+                code = "concurrency.stale_version";
+                detail = "This record was modified by someone else since you last read it. Fetch it again and retry.";
                 break;
 
-           case DbUpdateException { InnerException: PostgresException { SqlState: "23505" } }:
+            case DbUpdateException { InnerException: PostgresException { SqlState: "23505" } }:
                 status = StatusCodes.Status409Conflict;
                 code = "database.unique_violation";
                 detail = "This operation conflicts with an existing record.";
-            break;
+                break;
 
             default:                                        // anything we did NOT plan for = a bug
                 status = StatusCodes.Status500InternalServerError;

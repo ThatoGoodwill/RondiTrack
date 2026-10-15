@@ -8,11 +8,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using Npgsql;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using Npgsql;
 using OpenTelemetry.Trace;
 using RondiTrack.Api.Auth;
 using RondiTrack.Api.Authorization;
@@ -171,7 +171,8 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
-        context.ProblemDetails.Extensions["correlationId"] = context.HttpContext.TraceIdentifier);
+        // 6.2: the framework's own 401/403/404 bodies carry the SAME id as our handler's: the W3C trace id.
+        context.ProblemDetails.Extensions["correlationId"] = Correlation.GetId(context.HttpContext));
 
 // ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
 //   Logs   answer "what happened to this request?"      (ILogger, as before)
