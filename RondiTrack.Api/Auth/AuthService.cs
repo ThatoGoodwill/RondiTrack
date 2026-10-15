@@ -65,7 +65,13 @@ public sealed class AuthService(
 
         if (user is null || string.IsNullOrEmpty(user.PasswordHash) || verification == PasswordVerificationResult.Failed)
         {
-            logger.LogWarning("Login failed.");
+            // Information, not Warning: one typo is normal life. A SPIKE is what matters, and the sign-ins counter shows it.
+            // The typed email is NEVER logged (it may belong to a person who has nothing to do with us);
+            // an account that exists is identified by our own id only.
+            if (user is null)
+                logger.LogInformation("Sign-in failed: no account matches the submitted email.");
+            else
+                logger.LogInformation("Sign-in failed: credentials rejected for user {UserId}.", user.Id);
             metrics.SignInAttempted(succeeded: false);
             throw BadCredentials();
         }

@@ -225,9 +225,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
     await db.Database.MigrateAsync();
 
-    // TEMPORARY: wipe demo data so the seeder re-runs with the current password
-    await db.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"RefreshTokens\", \"Payouts\", \"Contributions\", \"StokvelMembers\", \"ContributionCycles\", \"Stokvels\", \"Users\" CASCADE;");
-
+    
     // Demo data only in Development, and only when a seed password is configured (user-secrets).
     if (app.Environment.IsDevelopment())
     {

@@ -68,7 +68,7 @@ public static class DevelopmentSeeder
         await cycles.AddAsync(Ok(ContributionCycle.Create(grocery.Id, "2026-09", 350.50m)));
         await cycles.AddAsync(Ok(ContributionCycle.Create(friday.Id, "2026-W39", 100.00m)));
 
-        logger.LogInformation("Demo data created (7 users, 3 stokvels). Nomsa joins nothing on purpose.");
+        logger.LogInformation("Demo data created (7 users, 3 stokvels).");
     }
 
     private static void Join(Stokvel stokvel, User user, StokvelMemberRole role)

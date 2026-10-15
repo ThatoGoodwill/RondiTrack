@@ -23,6 +23,11 @@ public static class ProblemResponseWriter
         };
         problem.Extensions["correlationId"] = correlationId;
 
+        // The framework's 401/403 never pass through RondiTrackExceptionHandler, so this is their log line: the SAME
+        // shape, the SAME correlation id, and only our fixed error code. Never the token, never the message.
+        httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(ProblemResponseWriter).FullName!)
+            .LogInformation("Request {CorrelationId} rejected with {Status} ({Code})", correlationId, status, code);
 
         httpContext.Response.StatusCode = status;
         httpContext.Response.Headers["X-Correlation-Id"] = correlationId;

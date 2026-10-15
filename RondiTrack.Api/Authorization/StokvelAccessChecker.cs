@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using RondiTrack.Api.Auth;
 using RondiTrack.Api.Observability;
 using RondiTrack.Domain.Exceptions;
 
@@ -10,8 +11,10 @@ namespace RondiTrack.Api.Authorization;
 //   member, role too low    -> 403
 // No try/catch anywhere: handlers decide, this class translates, the exception handler answers.
 //
-// 6.2: it is also the ONE place that COUNTS stokvel authorization refusals.
-public sealed class StokvelAccessChecker(IAuthorizationService authorization, RondiTrackMetrics metrics)
+// 6.2: it is also the ONE place that COUNTS and LOGS stokvel authorization refusals, identifying the caller
+// by our own user id only (never a name or an email).
+public sealed class StokvelAccessChecker(
+    IAuthorizationService authorization, RondiTrackMetrics metrics, ILogger<StokvelAccessChecker> logger)
 {
     // notFoundCode / notFoundMessage let a caller that reached the stokvel THROUGH another resource
     // (a payout) answer "not a member" with that resource's own 404, so nothing about the stokvel leaks.
@@ -39,12 +42,21 @@ public sealed class StokvelAccessChecker(IAuthorizationService authorization, Ro
         if (notMember)
         {
             metrics.AuthorizationRefused(RefusalResults.NotFound);
+            // Warning: a caller asking about a private group they do not belong to is either a stale link or someone
+            // probing ids. One line is harmless; a run of them is the signal, and the refusals counter shows the rate.
+            logger.LogWarning(
+                "Stokvel access refused: caller is not a member. UserId={UserId} StokvelId={StokvelId} Policy={Policy} CorrelationId={CorrelationId}",
+                user.GetUserId(), stokvelId, policy, Correlation.Current);
             throw new NotFoundException(
                 notFoundCode ?? "stokvel.not_found",
                 notFoundMessage ?? $"No stokvel with id {stokvelId} exists.");
         }
 
         metrics.AuthorizationRefused(RefusalResults.Forbidden);
+        // Information: a member pressing a button their role does not allow is ordinary product behaviour.
+        logger.LogInformation(
+            "Stokvel access refused: role too low. UserId={UserId} StokvelId={StokvelId} Policy={Policy} CorrelationId={CorrelationId}",
+            user.GetUserId(), stokvelId, policy, Correlation.Current);
         throw new ForbiddenException("stokvel.forbidden", "Your role in this stokvel does not allow this action.");
     }
 }

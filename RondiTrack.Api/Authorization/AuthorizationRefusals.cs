@@ -12,5 +12,10 @@ public static class AuthorizationRefusals
     {
         var services = httpContext.RequestServices;
         services.GetRequiredService<RondiTrackMetrics>().AuthorizationRefused(RefusalResults.Forbidden);
+        // Information: ordinary users meeting an admin-only route. Our own user id and the ACTION name, nothing else.
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("RondiTrack.Authorization");
+        logger.LogInformation(
+            "Request refused: platform role required. UserId={UserId} Endpoint={Endpoint} CorrelationId={CorrelationId}",
+            httpContext.User.GetUserId(), httpContext.GetEndpoint()?.DisplayName, Correlation.Current);
     }
 }

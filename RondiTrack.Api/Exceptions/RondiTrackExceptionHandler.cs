@@ -88,19 +88,29 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
             default:                                        // anything we did NOT plan for = a bug
                 status = StatusCodes.Status500InternalServerError;
                 code = "unexpected_error";
-                detail = "An unexpected error occurred."; // never leak internals to the client
+                // A fixed sentence. The real exception stays in OUR logs; the client gets the id to quote.
+                detail = "Something went wrong on our side. Please quote the correlationId if you contact support.";
                 break;
         }
 
         // ---- LOG FIRST (with the same correlation id the client will receive) --
-        if (status >= 500)
+        // 6.2 (POPIA): the level follows RESPONSIBILITY.
+        //   5xx = our fault  -> Error, with the full exception, so we can fix it.
+        //   4xx = the client's mistake -> Information, with the exception TYPE only. A 4xx message usually repeats what
+        //   the client sent ("a user with email x already exists"), and logs are retained, copied and read by people
+        //   who never use the app. The client still gets the message in the response body: it is their own data.
+        if (status >= StatusCodes.Status500InternalServerError)
+        {
             _logger.LogError(exception,
-                "Request failed. CorrelationId={CorrelationId} Status={Status} Code={Code}",
+                "Request {CorrelationId} failed with {Status} ({Code})",
                 correlationId, status, code);
+        }
         else
-            _logger.LogWarning(
-                "Request rejected. CorrelationId={CorrelationId} Status={Status} Code={Code} Detail={Detail}",
-                correlationId, status, code, detail);
+        {
+            _logger.LogInformation(
+                "Request {CorrelationId} rejected with {Status} ({Code}, {ExceptionType})",
+                correlationId, status, code, exception.GetType().Name);
+        }
 
         // ---- BUILD THE RFC 9457 problem+json BODY ------------------------------
         var problem = new ProblemDetails
