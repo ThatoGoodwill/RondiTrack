@@ -113,8 +113,13 @@ builder.Services
                     expired ? "Your access token has expired. Refresh it and try again."
                             : "Authentication is required to access this resource.");
             },
-            OnForbidden = context => ProblemResponseWriter.WriteAsync(context.HttpContext,
-                StatusCodes.Status403Forbidden, "auth.forbidden", "You do not have permission to perform this action.")
+            OnForbidden = context =>
+            {
+                // 6.2: a 403 from the platform-role check is an authorization refusal too: count and log it.
+                AuthorizationRefusals.ReportForbidden(context.HttpContext);
+                return ProblemResponseWriter.WriteAsync(context.HttpContext,
+                    StatusCodes.Status403Forbidden, "auth.forbidden", "You do not have permission to perform this action.");
+            }
         };
     });
 
@@ -144,6 +149,9 @@ builder.Services.AddScoped<IAuthorizationHandler, RecordContributionHandler>();
 builder.Services.AddScoped<StokvelAccessChecker>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
+// 6.2: the business counters (one Meter for the whole API). Singleton: counters are created once and shared.
+builder.Services.AddSingleton<RondiTrackMetrics>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
@@ -163,7 +171,10 @@ builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 // Services depend on Scoped repositories, so they are Scoped too.
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IMembershipService, MembershipService>();
-builder.Services.AddScoped<IContributionService, ContributionService>();
+// 6.2: ContributionService does the work; the Instrumented wrapper counts each NEW contribution.
+builder.Services.AddScoped<ContributionService>();
+builder.Services.AddScoped<IContributionService>(sp => new InstrumentedContributionService(
+    sp.GetRequiredService<ContributionService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<IPayoutService, PayoutService>();   // KEEP YOUR OWN line for the payout service (5.3); lifetime must be Scoped
 builder.Services.AddScoped<AuthService>();
 
@@ -194,6 +205,7 @@ var openTelemetry = builder.Services.AddOpenTelemetry()
     {
         metrics.AddAspNetCoreInstrumentation();               // request rate, errors, duration
         metrics.AddMeter("System.Runtime");                   // GC, thread pool, CPU (built into .NET)
+        metrics.AddMeter(RondiTrackMetrics.MeterName);        // our business counters: a meter nobody registers records into the void
     })
     .WithLogging();                                           // every ILogger call is ALSO sent to OpenTelemetry
 
