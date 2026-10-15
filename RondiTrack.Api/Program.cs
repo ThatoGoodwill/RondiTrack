@@ -222,9 +222,11 @@ var app = builder.Build();
 // ======================= 2. STARTUP WORK =======================
 using (var scope = app.Services.CreateScope())
 {
-    // Apply migrations so a fresh clone (and a fresh test container) gets the schema automatically.
     var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
     await db.Database.MigrateAsync();
+
+    // TEMPORARY: wipe demo data so the seeder re-runs with the current password
+    await db.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"RefreshTokens\", \"Payouts\", \"Contributions\", \"StokvelMembers\", \"ContributionCycles\", \"Stokvels\", \"Users\" CASCADE;");
 
     // Demo data only in Development, and only when a seed password is configured (user-secrets).
     if (app.Environment.IsDevelopment())
