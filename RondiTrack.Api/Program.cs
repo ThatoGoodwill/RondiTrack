@@ -175,7 +175,10 @@ builder.Services.AddScoped<IMembershipService, MembershipService>();
 builder.Services.AddScoped<ContributionService>();
 builder.Services.AddScoped<IContributionService>(sp => new InstrumentedContributionService(
     sp.GetRequiredService<ContributionService>(), sp.GetRequiredService<RondiTrackMetrics>()));
-builder.Services.AddScoped<IPayoutService, PayoutService>();   // KEEP YOUR OWN line for the payout service (5.3); lifetime must be Scoped
+// 6.2: PayoutService does the work; the Instrumented wrapper owns the payout.process span and the payout counter.
+builder.Services.AddScoped<PayoutService>();
+builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
+    sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
 
 // ---- Centralized error handling ----
@@ -199,6 +202,7 @@ var openTelemetry = builder.Services.AddOpenTelemetry()
         tracing.AddAspNetCoreInstrumentation(options =>
             options.Filter = httpContext => !httpContext.Request.Path.StartsWithSegments("/health"));
         tracing.AddNpgsql();                                  // one child span per SQL command (placeholders, never values)
+        tracing.AddSource(RondiTrackTelemetry.ActivitySourceName);   // our own payout.process span
         tracing.AddProcessor(new QueryStringRedactionProcessor());   // URL query strings can carry page tokens (= amounts)
     })
     .WithMetrics(metrics =>
