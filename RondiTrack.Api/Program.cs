@@ -12,8 +12,10 @@ using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
-using Npgsql;
 using OpenTelemetry.Trace;
+using Npgsql;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RondiTrack.Api.Auth;
 using RondiTrack.Api.Authorization;
 using RondiTrack.Api.Exceptions;
@@ -217,15 +219,30 @@ var openTelemetry = builder.Services.AddOpenTelemetry()
 if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
     openTelemetry.UseOtlpExporter();
 
+// ---- Health checks (6.2): liveness runs NO checks, readiness checks PostgreSQL ----
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<RondiTrackDbContext>("database", tags: ["ready"]);
+
+// A slow answer is an unhealthy answer: cap every check. Health:DatabaseTimeoutSeconds = 0 removes the cap
+// (only for the "before" measurement in the README).
+var databaseTimeoutSeconds = builder.Configuration.GetValue("Health:DatabaseTimeoutSeconds", 3);
+builder.Services.Configure<HealthCheckServiceOptions>(options =>
+{
+    foreach (var registration in options.Registrations)
+        registration.Timeout = databaseTimeoutSeconds > 0
+            ? TimeSpan.FromSeconds(databaseTimeoutSeconds)
+            : Timeout.InfiniteTimeSpan;
+});
+
 var app = builder.Build();
 
 // ======================= 2. STARTUP WORK =======================
 using (var scope = app.Services.CreateScope())
 {
+    // Apply migrations so a fresh clone (and a fresh test container) gets the schema automatically.
     var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
     await db.Database.MigrateAsync();
 
-    
     // Demo data only in Development, and only when a seed password is configured (user-secrets).
     if (app.Environment.IsDevelopment())
     {
@@ -249,6 +266,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();   // who are you?
 app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
 app.MapControllers();
+
+// The platform has no token, so the probes opt out of the fallback policy. They return ONLY "Healthy" or "Unhealthy".
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") })
+    .AllowAnonymous();
 
 app.Run();
 
