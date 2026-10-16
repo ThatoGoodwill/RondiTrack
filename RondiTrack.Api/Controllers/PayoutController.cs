@@ -7,6 +7,8 @@ using RondiTrack.Api.Services;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Infrastructure.Data;
+using Microsoft.AspNetCore.RateLimiting;
+using RondiTrack.Api.Frontend;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -15,6 +17,7 @@ namespace RondiTrack.Api.Controllers;
 public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting(RateLimitPolicies.Payouts)]
     [StokvelAccess(Policies.StokvelTreasurer)]   // treasurer or chairperson only
     [EndpointSummary("Process the next payout for a stokvel's contribution cycle")]
     [EndpointDescription("Determines the next eligible recipient by join order, creates a Payout record, " +
