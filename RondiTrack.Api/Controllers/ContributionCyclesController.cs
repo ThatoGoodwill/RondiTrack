@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Domain.Repositories;
@@ -11,7 +11,7 @@ namespace RondiTrack.Api.Controllers;
 // Plain CRUD, NO SERVICE, on purpose: creating a cycle needs exactly one existence check
 // (does the stokvel exist?), a single repository lookup with no further decision attached.
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/cycles")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/cycles")]
 public class ContributionCyclesController(
     IStokvelRepository stokvels, IContributionCycleRepository cycles) : ApiControllerBase
 {

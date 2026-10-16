@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Auth;
@@ -10,7 +10,7 @@ namespace RondiTrack.Api.Controllers;
 // The only controller anyone can call without a token: you cannot be asked for a token on the
 // endpoint that gives you one. HTTP only; decisions live in AuthService.
 [ApiController]
-[Route("api/auth")]
+[Route(ApiRoutes.Base + "/auth")]
 [AllowAnonymous]
 public class AuthController(AuthService authService) : ApiControllerBase
 {
@@ -73,7 +73,7 @@ public class AuthController(AuthService authService) : ApiControllerBase
         HttpOnly = true,
         Secure = true,
         SameSite = SameSiteMode.Strict,
-        Path = "/api/auth",
+        Path = ApiRoutes.Root + "/auth",
         Expires = expires
     };
 }

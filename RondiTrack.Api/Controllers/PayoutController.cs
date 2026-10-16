@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Api.Authorization;
@@ -11,7 +11,7 @@ using RondiTrack.Infrastructure.Data;
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/payout")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/payout")]
 public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
 {
     [HttpPost]
@@ -28,7 +28,7 @@ public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
         return StatusCode(StatusCodes.Status201Created, PayoutResponse.FromEntity(payout));
     }
 
-    [HttpGet("/api/payouts/{id:guid}")]
+    [HttpGet(ApiRoutes.Root + "/payouts/{id:guid}")]
     [EndpointSummary("Get a payout by id")]
     [ProducesResponseType<PayoutResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -47,7 +47,7 @@ public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
         return Ok(PayoutResponse.FromEntity(payout));
     }
 
-    [HttpPut("/api/payouts/{id:guid}")]
+    [HttpPut(ApiRoutes.Root + "/payouts/{id:guid}")]
     [EndpointSummary("Update a payout's amount (optimistic concurrency)")]
     [ProducesResponseType<PayoutResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

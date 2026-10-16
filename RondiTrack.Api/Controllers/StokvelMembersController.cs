@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Api.Contracts;
@@ -13,7 +13,7 @@ using RondiTrack.Api.Authorization;
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/members")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/members")]
 public class StokvelMembersController(
     RondiTrackDbContext context,
     IStokvelRepository stokvels,

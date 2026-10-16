@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +13,7 @@ using RondiTrack.Infrastructure.Data;
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/contributions")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/contributions")]
 public class StokvelContributionsController(
     IContributionService contributionService,
     RondiTrackDbContext context) : ApiControllerBase
