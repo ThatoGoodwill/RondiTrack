@@ -191,6 +191,7 @@ builder.Services.AddProblemDetails(options =>
         // 6.2: the framework's own 401/403/404 bodies carry the SAME id as our handler's: the W3C trace id.
         context.ProblemDetails.Extensions["correlationId"] = Correlation.GetId(context.HttpContext));
 builder.Services.AddFrontendCors(builder.Configuration);
+builder.Services.AddRondiTrackRateLimiting(builder.Configuration);
 
 
 // ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
@@ -270,6 +271,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicies.Frontend); // first thing that looks at the request, so a preflight never reaches authentication 
 app.UseAuthentication();   // who are you?
+app.UseRateLimiter(); // after authentication (needs the user id), before authorization (which hits the database)
 app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
 app.MapControllers();
 

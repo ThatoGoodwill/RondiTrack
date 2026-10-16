@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Auth;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Domain;
+using Microsoft.AspNetCore.RateLimiting;
+using RondiTrack.Api.Frontend;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -29,6 +31,7 @@ public class AuthController(AuthService authService) : ApiControllerBase
     }
 
     [HttpPost("login")]
+     [EnableRateLimiting(RateLimitPolicies.Login)]
     [EndpointSummary("Sign in with email and password")]
     [EndpointDescription("Returns an access token in the body. The refresh token is set as an HttpOnly cookie.")]
     [ProducesResponseType<TokenResponse>(StatusCodes.Status200OK)]
