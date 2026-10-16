@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using RondiTrack.Api.Observability;
 using RondiTrack.Domain.Exceptions;
+using RondiTrack.Api.Frontend;
 
 namespace RondiTrack.Api.Exceptions;
 
@@ -34,6 +35,7 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
         // 6.2: the request's W3C TRACE ID (the caller's, if they sent a traceparent header). The SAME value goes in
         // (a) the log line, (b) the response body, (c) a response header, and it is the trace's own id in the dashboard.
         var correlationId = Correlation.GetId(httpContext);
+                await CorsHeaders.ReapplyAsync(httpContext);   // 6.3: stokvel-scoped 404/403 etc. must stay readable by the browser
 
         // ---- MAP EXCEPTION -> STATUS ------------------------------------------
         // Order matters only when one class inherits another. ConflictException also matches

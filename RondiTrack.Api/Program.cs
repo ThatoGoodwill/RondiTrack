@@ -28,6 +28,7 @@ using RondiTrack.Domain;
 using RondiTrack.Domain.Repositories;
 using RondiTrack.Infrastructure.Data;
 using Scalar.AspNetCore;
+using RondiTrack.Api.Frontend;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -189,6 +190,8 @@ builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
         // 6.2: the framework's own 401/403/404 bodies carry the SAME id as our handler's: the W3C trace id.
         context.ProblemDetails.Extensions["correlationId"] = Correlation.GetId(context.HttpContext));
+builder.Services.AddFrontendCors(builder.Configuration);
+
 
 // ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
 //   Logs   answer "what happened to this request?"      (ILogger, as before)
@@ -196,6 +199,8 @@ builder.Services.AddProblemDetails(options =>
 //   Metrics answer "how often, and is it getting worse?" (counters with small, fixed tag sets)
 // Everything is labelled "ronditrack-api". Nothing leaves the process unless OTEL_EXPORTER_OTLP_ENDPOINT is set,
 // so tests and CI never need a dashboard.
+
+
 var openTelemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("ronditrack-api"))
     .WithTracing(tracing =>
@@ -263,6 +268,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors(CorsPolicies.Frontend); // first thing that looks at the request, so a preflight never reaches authentication 
 app.UseAuthentication();   // who are you?
 app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
 app.MapControllers();
