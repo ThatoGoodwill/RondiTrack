@@ -71,7 +71,7 @@ public sealed class RondiTrackExceptionHandler : IExceptionHandler
                 detail = "One or more fields are invalid.";
                 // Group messages by field so a client can show them next to each input.
                 fieldErrors = ve.Errors
-                    .GroupBy(x => x.PropertyName)
+                    .GroupBy(x => FieldNames.ToCamelPath(x.PropertyName))
                     .ToDictionary(g => g.Key, g => g.Select(x => x.ErrorMessage).ToArray());
                 break;
 
