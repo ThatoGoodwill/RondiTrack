@@ -812,6 +812,7 @@ info: Microsoft.EntityFrameworkCore.Database.Command[20101]
 info: Microsoft.EntityFrameworkCore.Database.Command[20101]**
 
 ### # RondiTrack
+## # RondiTrack
 
 A stokvel management API built with ASP.NET Core, EF Core and PostgreSQL.
 
@@ -1143,6 +1144,7 @@ exhausted connection pool), where a connection attempt waits for Npgsql's
 default 15-second connect timeout — far longer than a platform's probe window
 (Kubernetes' default is 1 s). A slow answer is an unhealthy answer.]`
 
+
 The app recovers without a restart once PostgreSQL is back: `/health/ready`
 returns 200 immediately.
 
@@ -1178,7 +1180,7 @@ suite was therefore run **on GitHub Actions** (`.github/workflows/tests.yml`),
 which has Docker and **no development database at all** — proving the suite does
 not depend on one.
 
-
+Result: all 44 tests passed on GitHub Actions (Ubuntu runner, `dotnet test RondiTrack.slnx --configuration Release`) on 2026-10-15.
 ### 6.7 Final checks
 
 - `Find-Cs "EnableSensitiveDataLogging"` → no results.
