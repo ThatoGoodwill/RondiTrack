@@ -51,7 +51,7 @@ Assert.Equal(expected, applied.OrderBy(m => m).ToList());
     {
         var client = factory.CreateAdminClient();
 
-        var response = await client.GetAsync($"/api/payouts/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/v1/payouts/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -71,7 +71,7 @@ Assert.Equal(expected, applied.OrderBy(m => m).ToList());
             dateOfBirth = "1990-01-01"
         };
 
-        var created = await client.PostAsJsonAsync("/api/users", request);
+        var created = await client.PostAsJsonAsync("/api/v1/users", request);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
         var location = created.Headers.Location;

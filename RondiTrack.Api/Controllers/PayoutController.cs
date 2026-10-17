@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Api.Authorization;
@@ -7,14 +7,17 @@ using RondiTrack.Api.Services;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Infrastructure.Data;
+using Microsoft.AspNetCore.RateLimiting;
+using RondiTrack.Api.Frontend;
 
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/payout")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/payout")]
 public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting(RateLimitPolicies.Payouts)]
     [StokvelAccess(Policies.StokvelTreasurer)]   // treasurer or chairperson only
     [EndpointSummary("Process the next payout for a stokvel's contribution cycle")]
     [EndpointDescription("Determines the next eligible recipient by join order, creates a Payout record, " +
@@ -28,7 +31,7 @@ public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
         return StatusCode(StatusCodes.Status201Created, PayoutResponse.FromEntity(payout));
     }
 
-    [HttpGet("/api/payouts/{id:guid}")]
+    [HttpGet(ApiRoutes.Root + "/payouts/{id:guid}")]
     [EndpointSummary("Get a payout by id")]
     [ProducesResponseType<PayoutResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -47,7 +50,7 @@ public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
         return Ok(PayoutResponse.FromEntity(payout));
     }
 
-    [HttpPut("/api/payouts/{id:guid}")]
+    [HttpPut(ApiRoutes.Root + "/payouts/{id:guid}")]
     [EndpointSummary("Update a payout's amount (optimistic concurrency)")]
     [ProducesResponseType<PayoutResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

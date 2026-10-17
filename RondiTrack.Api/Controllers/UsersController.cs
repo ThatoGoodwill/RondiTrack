@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Domain.Repositories;
@@ -18,7 +18,7 @@ namespace RondiTrack.Api.Controllers;
 // ---------------------------------------------------------------------------------
 [Authorize(Policy = Policies.PlatformAdmin)]
 [ApiController]
-[Route("api/users")]
+[Route(ApiRoutes.Base + "/users")]
 public class UsersController(IUserRepository users, IUserService userService) : ApiControllerBase
 {
     [HttpGet]

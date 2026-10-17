@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -28,7 +28,7 @@ public class AuthTests
         new("Lerato", "Mokoena", email ?? NewEmail(), new DateOnly(1992, 7, 21), password ?? PostgresApiFactory.DefaultPassword);
 
     private Task<HttpResponseMessage> LoginAsync(string email, string password) =>
-        _anonymous.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password));
+        _anonymous.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, password));
 
     private static string ReadRefreshCookie(HttpResponseMessage response)
     {
@@ -36,7 +36,7 @@ public class AuthTests
         Assert.Contains("httponly", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("secure", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", setCookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("path=/api/auth", setCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/api/v1/auth", setCookie, StringComparison.OrdinalIgnoreCase);
         return setCookie.Split(';')[0]["refresh_token=".Length..];
     }
 
@@ -57,7 +57,7 @@ public class AuthTests
     private async Task<(string Email, string RefreshToken, TokenResponse Tokens)> RegisterAndLoginAsync()
     {
         var email = NewEmail();
-        var register = await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(email));
+        var register = await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(email));
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
 
         var login = await LoginAsync(email, PostgresApiFactory.DefaultPassword);
@@ -71,7 +71,7 @@ public class AuthTests
     [Fact]
     public async Task No_token_is_401_problem_json()
     {
-        var response = await _anonymous.GetAsync($"/api/stokvels/{Guid.NewGuid()}");
+        var response = await _anonymous.GetAsync($"/api/v1/stokvels/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var problem = await ReadProblemAsync(response);
@@ -84,7 +84,7 @@ public class AuthTests
         var client = _factory.CreateAnonymousClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", "not.a.token");
 
-        var response = await client.GetAsync($"/api/stokvels/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/v1/stokvels/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         await ReadProblemAsync(response);
@@ -95,7 +95,7 @@ public class AuthTests
     [Fact]
     public async Task Register_creates_an_account_and_never_returns_the_password_or_hash()
     {
-        var response = await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration());
+        var response = await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration());
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -105,7 +105,7 @@ public class AuthTests
     [Fact]
     public async Task Register_with_a_short_password_is_400_problem_json()
     {
-        var response = await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(password: "short-pw-1"));
+        var response = await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(password: "short-pw-1"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         await ReadProblemAsync(response);
@@ -115,10 +115,10 @@ public class AuthTests
     public async Task Register_with_the_same_email_in_a_different_case_is_409()
     {
         var email = NewEmail();
-        var first = await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(email));
+        var first = await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(email));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
-        var second = await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(email.ToUpperInvariant()));
+        var second = await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(email.ToUpperInvariant()));
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         await ReadProblemAsync(second);
@@ -130,7 +130,7 @@ public class AuthTests
     public async Task Login_returns_a_short_lived_access_token_and_the_refresh_token_only_in_a_cookie()
     {
         var email = NewEmail();
-        await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(email));
+        await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(email));
 
         var response = await LoginAsync(email, PostgresApiFactory.DefaultPassword);
 
@@ -158,7 +158,7 @@ public class AuthTests
     public async Task Wrong_password_and_unknown_email_return_identical_problem_details()
     {
         var email = NewEmail();
-        await _anonymous.PostAsJsonAsync("/api/auth/register", NewRegistration(email));
+        await _anonymous.PostAsJsonAsync("/api/v1/auth/register", NewRegistration(email));
 
         var wrongPassword = await LoginAsync(email, "Definitely-Wrong-Pass-9");
         var unknownEmail = await LoginAsync(NewEmail(), "Definitely-Wrong-Pass-9");
@@ -181,25 +181,25 @@ public class AuthTests
         var (_, first, _) = await RegisterAndLoginAsync();
 
         // 1. Using the first token works and gives a DIFFERENT second token.
-        var rotated = await PostWithCookieAsync("/api/auth/refresh", first);
+        var rotated = await PostWithCookieAsync("/api/v1/auth/refresh", first);
         Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
         var second = ReadRefreshCookie(rotated);
         Assert.NotEqual(first, second);
 
         // 2. Replaying the FIRST token is reuse: 401...
-        var replay = await PostWithCookieAsync("/api/auth/refresh", first);
+        var replay = await PostWithCookieAsync("/api/v1/auth/refresh", first);
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         await ReadProblemAsync(replay);
 
         // 3. ...and the whole family is dead, so the legitimate SECOND token is rejected as well.
-        var newer = await PostWithCookieAsync("/api/auth/refresh", second);
+        var newer = await PostWithCookieAsync("/api/v1/auth/refresh", second);
         Assert.Equal(HttpStatusCode.Unauthorized, newer.StatusCode);
     }
 
     [Fact]
     public async Task Refresh_without_a_cookie_is_401()
     {
-        var response = await _anonymous.PostAsync("/api/auth/refresh", null);
+        var response = await _anonymous.PostAsync("/api/v1/auth/refresh", null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -211,16 +211,16 @@ public class AuthTests
     {
         var (_, refreshToken, _) = await RegisterAndLoginAsync();
 
-        var logout = await PostWithCookieAsync("/api/auth/logout", refreshToken);
+        var logout = await PostWithCookieAsync("/api/v1/auth/logout", refreshToken);
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
 
-        var refresh = await PostWithCookieAsync("/api/auth/refresh", refreshToken);
+        var refresh = await PostWithCookieAsync("/api/v1/auth/refresh", refreshToken);
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
 
-        var logoutAgain = await PostWithCookieAsync("/api/auth/logout", refreshToken);   // same token, already revoked
+        var logoutAgain = await PostWithCookieAsync("/api/v1/auth/logout", refreshToken);   // same token, already revoked
         Assert.Equal(HttpStatusCode.NoContent, logoutAgain.StatusCode);
 
-        var logoutWithNothing = await _anonymous.PostAsync("/api/auth/logout", null);    // no cookie at all
+        var logoutWithNothing = await _anonymous.PostAsync("/api/v1/auth/logout", null);    // no cookie at all
         Assert.Equal(HttpStatusCode.NoContent, logoutWithNothing.StatusCode);
     }
 }

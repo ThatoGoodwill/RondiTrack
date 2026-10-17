@@ -1,0 +1,16 @@
+{
+  "name": "ronditrack-client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-spec": "curl.exe -k -sS -o openapi.json https://localhost:7154/openapi/v1.json",
+    "generate": "openapi-typescript openapi.json -o src/api.d.ts",
+    "check": "tsc --noEmit --strict",
+    "contract": "npm run fetch-spec && npm run generate && npm run check"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

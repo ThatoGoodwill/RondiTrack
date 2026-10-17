@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
@@ -51,7 +51,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
     private static Task<HttpResponseMessage> RecordContributionAsync(
         HttpClient client, Guid stokvelId, Guid cycleId, Guid forUserId, decimal amount, string? idempotencyKey = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/stokvels/{stokvelId}/contributions")
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/stokvels/{stokvelId}/contributions")
         {
             Content = JsonContent.Create(new ContributionRequest(forUserId, cycleId, amount))
         };
@@ -75,7 +75,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
         return (treasurer, member, stokvelId, cycleId);
     }
 
-    private static string PayoutUrl(Guid stokvelId, Guid cycleId) => $"/api/stokvels/{stokvelId}/cycles/{cycleId}/payout";
+    private static string PayoutUrl(Guid stokvelId, Guid cycleId) => $"/api/v1/stokvels/{stokvelId}/cycles/{cycleId}/payout";
 
     // ---------- health probes ----------
 
@@ -108,7 +108,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
         var traceId = NewTraceId();
 
         var response = await factory.CreateClientFor(stranger)
-            .SendAsync(Traced(HttpMethod.Get, $"/api/stokvels/{stokvelId}", traceId));
+            .SendAsync(Traced(HttpMethod.Get, $"/api/v1/stokvels/{stokvelId}", traceId));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(traceId, await CorrelationIdOf(response));
@@ -126,7 +126,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
         var traceId = NewTraceId();
 
         var response = await factory.CreateAnonymousClient()
-            .SendAsync(Traced(HttpMethod.Get, $"/api/stokvels/{Guid.NewGuid()}", traceId));
+            .SendAsync(Traced(HttpMethod.Get, $"/api/v1/stokvels/{Guid.NewGuid()}", traceId));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(traceId, await CorrelationIdOf(response));
@@ -136,7 +136,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
     [Fact]
     public async Task Without_a_traceparent_the_correlation_id_is_still_a_trace_id_not_the_aspnetcore_request_number()
     {
-        var response = await factory.CreateAnonymousClient().GetAsync($"/api/stokvels/{Guid.NewGuid()}");
+        var response = await factory.CreateAnonymousClient().GetAsync($"/api/v1/stokvels/{Guid.NewGuid()}");
 
         var correlationId = await CorrelationIdOf(response);
 
@@ -157,18 +157,18 @@ public class ObservabilityTests(PostgresApiFactory factory)
         factory.Logs.Clear();
 
         // 1. register
-        var register = await anonymous.PostAsJsonAsync("/api/auth/register", registration);
+        var register = await anonymous.PostAsJsonAsync("/api/v1/auth/register", registration);
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
         var user = (await register.Content.ReadFromJsonAsync<UserResponse>())!;
 
         // 2. log in
-        var login = await anonymous.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password));
+        var login = await anonymous.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, password));
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var firstTokens = (await login.Content.ReadFromJsonAsync<TokenResponse>())!;
         var firstRefreshToken = ReadRefreshCookie(login);
 
         // 3. refresh
-        var refresh = await PostWithCookieAsync(anonymous, "/api/auth/refresh", firstRefreshToken);
+        var refresh = await PostWithCookieAsync(anonymous, "/api/v1/auth/refresh", firstRefreshToken);
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
         var secondTokens = (await refresh.Content.ReadFromJsonAsync<TokenResponse>())!;
         var secondRefreshToken = ReadRefreshCookie(refresh);
@@ -183,7 +183,7 @@ public class ObservabilityTests(PostgresApiFactory factory)
 
         // 5. register the same email again: a 409, which is the CLIENT's mistake, not ours
         var linesBeforeDuplicate = factory.Logs.Entries.Count;
-        var duplicate = await anonymous.PostAsJsonAsync("/api/auth/register", registration);
+        var duplicate = await anonymous.PostAsJsonAsync("/api/v1/auth/register", registration);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         var duplicateLines = factory.Logs.Entries.Skip(linesBeforeDuplicate).ToList();
 
@@ -226,9 +226,9 @@ public class ObservabilityTests(PostgresApiFactory factory)
         var anonymous = factory.CreateAnonymousClient();
         factory.Logs.Clear();
 
-        var wrongPassword = await anonymous.PostAsJsonAsync("/api/auth/login",
+        var wrongPassword = await anonymous.PostAsJsonAsync("/api/v1/auth/login",
             new LoginRequest(existing.Email, "definitely-the-wrong-password"));
-        var unknownAccount = await anonymous.PostAsJsonAsync("/api/auth/login",
+        var unknownAccount = await anonymous.PostAsJsonAsync("/api/v1/auth/login",
             new LoginRequest(unknownEmail, "definitely-the-wrong-password"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrongPassword.StatusCode);
@@ -247,12 +247,12 @@ public class ObservabilityTests(PostgresApiFactory factory)
     {
         var user = await factory.CreateUserAsync();
         var anonymous = factory.CreateAnonymousClient();
-        var login = await anonymous.PostAsJsonAsync("/api/auth/login", new LoginRequest(user.Email, user.Password));
+        var login = await anonymous.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(user.Email, user.Password));
         var oldRefreshToken = ReadRefreshCookie(login);
-        Assert.Equal(HttpStatusCode.OK, (await PostWithCookieAsync(anonymous, "/api/auth/refresh", oldRefreshToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostWithCookieAsync(anonymous, "/api/v1/auth/refresh", oldRefreshToken)).StatusCode);
         factory.Logs.Clear();
 
-        var replay = await PostWithCookieAsync(anonymous, "/api/auth/refresh", oldRefreshToken);   // the OLD token again
+        var replay = await PostWithCookieAsync(anonymous, "/api/v1/auth/refresh", oldRefreshToken);   // the OLD token again
 
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         var entries = factory.Logs.Entries;
@@ -348,9 +348,9 @@ public class ObservabilityTests(PostgresApiFactory factory)
         var stokvelId = await factory.CreateStokvelAsync((chair, StokvelMemberRole.Admin), (member, StokvelMemberRole.Member));
         using var recorder = new MeterRecorder(factory.Services, RondiTrackMetrics.MeterName);
 
-        var notMember = await factory.CreateClientFor(stranger).GetAsync($"/api/stokvels/{stokvelId}");
+        var notMember = await factory.CreateClientFor(stranger).GetAsync($"/api/v1/stokvels/{stokvelId}");
         var wrongRole = await factory.CreateClientFor(member)
-            .PostAsJsonAsync($"/api/stokvels/{stokvelId}/cycles", new ContributionCycleRequest($"C-{Guid.NewGuid():N}"[..12], 100m));
+            .PostAsJsonAsync($"/api/v1/stokvels/{stokvelId}/cycles", new ContributionCycleRequest($"C-{Guid.NewGuid():N}"[..12], 100m));
 
         Assert.Equal(HttpStatusCode.NotFound, notMember.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, wrongRole.StatusCode);

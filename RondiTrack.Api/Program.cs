@@ -28,6 +28,8 @@ using RondiTrack.Domain;
 using RondiTrack.Domain.Repositories;
 using RondiTrack.Infrastructure.Data;
 using Scalar.AspNetCore;
+using RondiTrack.Api.Frontend;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,7 +42,11 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<StokvelScopeFilter>();
     options.Filters.Add<ValidationFilter>();
-});
+})
+.AddJsonOptions(o => o.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+
+// The OpenAPI generator reads THESE options. Strict here is what removes "or string" from the generated document.
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 
 builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -182,13 +188,25 @@ builder.Services.AddScoped<PayoutService>();
 builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
     sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IHomeService, HomeService>();
 
 // ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
-        // 6.2: the framework's own 401/403/404 bodies carry the SAME id as our handler's: the W3C trace id.
-        context.ProblemDetails.Extensions["correlationId"] = Correlation.GetId(context.HttpContext));
+    {
+        // 6.3: the framework's own bare errors get the SAME shape as ours: type, title, status, detail, instance, correlationId.
+        var problem = context.ProblemDetails;
+        problem.Type = $"urn:ronditrack:error:http.{problem.Status}";
+        problem.Title = $"http.{problem.Status}";
+        problem.Detail ??= "The request could not be completed.";
+        problem.Instance ??= context.HttpContext.Request.Path;
+        problem.Extensions.Remove("traceId");     // one id only: correlationId
+        problem.Extensions["correlationId"] = Correlation.GetId(context.HttpContext);
+    });
+builder.Services.AddFrontendCors(builder.Configuration);
+builder.Services.AddRondiTrackRateLimiting(builder.Configuration);
+
 
 // ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
 //   Logs   answer "what happened to this request?"      (ILogger, as before)
@@ -196,6 +214,8 @@ builder.Services.AddProblemDetails(options =>
 //   Metrics answer "how often, and is it getting worse?" (counters with small, fixed tag sets)
 // Everything is labelled "ronditrack-api". Nothing leaves the process unless OTEL_EXPORTER_OTLP_ENDPOINT is set,
 // so tests and CI never need a dashboard.
+
+
 var openTelemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("ronditrack-api"))
     .WithTracing(tracing =>
@@ -263,7 +283,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors(CorsPolicies.Frontend); // first thing that looks at the request, so a preflight never reaches authentication 
 app.UseAuthentication();   // who are you?
+app.UseRateLimiter(); // after authentication (needs the user id), before authorization (which hits the database)
 app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
 app.MapControllers();
 

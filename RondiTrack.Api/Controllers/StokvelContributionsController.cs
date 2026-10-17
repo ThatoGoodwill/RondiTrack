@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,11 +9,13 @@ using RondiTrack.Api.Services.Paging;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Infrastructure.Data;
+using Microsoft.AspNetCore.RateLimiting;
+using RondiTrack.Api.Frontend;
 
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
-[Route("api/stokvels/{stokvelId:guid}/contributions")]
+[Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/contributions")]
 public class StokvelContributionsController(
     IContributionService contributionService,
     RondiTrackDbContext context) : ApiControllerBase
@@ -119,6 +121,7 @@ public class StokvelContributionsController(
     }
 
     [HttpPost]
+    [EnableRateLimiting(RateLimitPolicies.Contributions)]
     [EndpointSummary("Record a contribution (requires an Idempotency-Key header)")]
     [ProducesResponseType<ContributionResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ContributionResponse>(StatusCodes.Status200OK)]

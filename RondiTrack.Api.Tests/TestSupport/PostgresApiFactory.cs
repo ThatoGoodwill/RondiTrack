@@ -37,6 +37,7 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public CapturingLoggerProvider Logs { get; } = new();
     // Exposed so tests can build their own DbContext against the same container database.
     public string ConnectionString => _container.GetConnectionString();
+
     public async Task InitializeAsync() => await _container.StartAsync();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -45,6 +46,14 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // and UseSetting is applied before Program.cs runs.
         builder.UseSetting("ConnectionStrings:RondiTrack", _container.GetConnectionString());
         builder.UseSetting("Jwt:SigningKey", TestSigningKey);
+                // 6.3: the one allowed frontend origin, and rate limits so generous that tests which are NOT about
+        // rate limiting never hit one. The rate-limit tests set their own limits (WithWebHostBuilder + UseSetting).
+        builder.UseSetting("Cors:AllowedOrigins:0", "http://localhost:3000");
+        builder.UseSetting("RateLimiting:Login:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Contributions:TokenLimit", "100000");
+        builder.UseSetting("RateLimiting:Contributions:TokensPerPeriod", "100000");
+        builder.UseSetting("RateLimiting:Payouts:TokenLimit", "100000");
+        builder.UseSetting("RateLimiting:Payouts:TokensPerPeriod", "100000");
         // SeedUsers:Password is deliberately NOT set: the demo seeder skips, so every test starts from an empty database.
 
         // 6.2: one extra logger provider that remembers everything the app logs (see CapturingLoggerProvider).
@@ -75,6 +84,12 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", tokenService.CreateAccessToken(user.Id, role).Token);
         return client;
+    }
+
+    public string AccessTokenFor(TestUser user)
+    {
+        var role = user.IsPlatformAdmin ? PlatformRoles.PlatformAdmin : PlatformRoles.User;
+        return Services.GetRequiredService<TokenService>().CreateAccessToken(user.Id, role).Token;
     }
 
     // Every pre-6.1 test was written for "can do anything". A platform admin keeps it that way, so no

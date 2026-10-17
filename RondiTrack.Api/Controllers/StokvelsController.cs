@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Auth;
@@ -13,7 +13,7 @@ namespace RondiTrack.Api.Controllers;
 // Plain CRUD talking straight to the repository: NO service on purpose.
 // Nothing here needs a decision beyond ONE stokvel's own fields.
 [ApiController]
-[Route("api/stokvels")]
+[Route(ApiRoutes.Base + "/stokvels")]
 public class StokvelsController(IStokvelRepository stokvels) : ApiControllerBase
 {
     // THE one plain role check in the app (6.1): listing EVERY stokvel is a platform-level operation.
