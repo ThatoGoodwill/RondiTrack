@@ -1258,3 +1258,150 @@ RondiTrack/
 ## 10. License
 
 Educational project — not for production use.
+
+## ## Assignment 6.3: Ready for the Frontend
+
+### 1. Versioning
+Every route moved from `/api/...` to `/api/v1/...`. The version lives in one constant (`ApiRoutes.Version`, with
+`ApiRoutes.Base` = `api/v1` and `ApiRoutes.Root` = `/api/v1`); controllers write `[Route(ApiRoutes.Base + "/stokvels")]`
+and never type the version. The 6.1 refresh cookie's `Path` moved with it from `/api/auth` to `/api/v1/auth`,
+otherwise the browser would stop sending it to the refresh endpoint. There is one version, so I used a path
+constant and no versioning library. `/health/*` stays unversioned: it is platform infrastructure, not API.
+A test logs in, checks `path=/api/v1/auth` on the cookie, refreshes at the new path, and checks the old path is gone.
+
+### 2. CORS
+Policy `frontend` (defined in `CorsSetup.cs`, used once in `Program.cs`):
+| Setting | Value | Why |
+|---|---|---|
+| Origins | `Cors:AllowedOrigins`: `[]` in appsettings.json, `["http://localhost:3000"]` in Development | Exact origins from configuration. Startup fails on a wildcard or a malformed origin. The request's Origin is never echoed. |
+| Methods | GET, POST, PUT, DELETE | Listed, not `*`. |
+| Request headers | Content-Type, Authorization, Idempotency-Key, If-Match, traceparent | `Idempotency-Key` is a custom header: without it the preflight fails and the browser never sends the contribution. |
+| Exposed headers | Retry-After, Idempotency-Replayed, X-Correlation-Id, ETag, Location | A browser hides all other response headers from JavaScript. |
+| Credentials | `AllowCredentials()` | The refresh cookie. |
+CORS runs before authentication, so a preflight (which carries no token) is answered before the 6.1 fallback policy
+can reject it. The exception handler resets the response before it writes an error, so it re-applies the CORS
+headers; a test proves the stokvel-scoped 404 carries `Access-Control-Allow-Origin`.
+
+#### Will the refresh cookie reach the API? (SameSite=Strict)
+An **origin** is scheme + host + port. A **site** is scheme + registrable domain (ports ignored). CORS decides
+whether the browser lets JavaScript read a response (origins). `SameSite` decides whether the browser attaches
+the cookie (sites).
+1. **localhost:3000 in development.** Different origins (different port), so CORS with credentials is required. If the
+   API runs over http (`http://localhost:5019`), the two are the same site (`localhost`), so the Strict cookie is stored
+   and sent. If the API runs over https (`https://localhost:7154`) and the page over http, current Chromium browsers
+   treat the scheme as part of the site ("schemeful same-site"), so they are cross-site and the Strict cookie is
+   not stored. Fix: run both over http, or run Next.js over https. The frontend must use `credentials: "include"`.
+2. **app.ronditrack.co.za to api.ronditrack.co.za.** Different origins (different host), same site (`co.za` is a
+   public suffix, so the registrable domain is `ronditrack.co.za`). The Strict cookie works. CORS with credentials
+   is still needed. The cookie has no `Domain` attribute, so it belongs to `api.` only, which is where it is needed.
+3. **ronditrack.vercel.app to ronditrack-api.azurewebsites.net.** Different origins and different sites (both are
+   public suffixes, so each name is its own site). A Strict (or Lax) cookie is neither stored nor sent on this
+   cross-site request, and `SameSite=None` is increasingly blocked as a third-party cookie. It will not work as
+   built. Fix: put both under one parent domain, or have the Next.js server proxy `/api` so the browser sees one origin.
+
+### 3. Rate limiting
+| Policy | Applies to | Algorithm | Partition | Configuration (appsettings.json) |
+|---|---|---|---|---|
+| `login` | POST /api/v1/auth/login | Fixed window | client IP | 10 per 60 s |
+| `contributions` | POST .../contributions | Token bucket | signed-in user id | burst 30, +10 tokens per 60 s |
+| `payouts` | POST .../payout | Token bucket | signed-in user id | burst 10, +2 tokens per 60 s |
+Policies are named in `RateLimiting.cs`; endpoints only reference them with `[EnableRateLimiting(name)]`.
+Every rejection is a 429 (not the default 503) with `Retry-After` (seconds) and a problem+json body with
+`title`, `detail` and the 6.2 `correlationId`. No request is queued.
+
+**Why a token bucket for money.** A treasurer may record twenty contributions after a meeting, then nothing for a
+month. A token bucket separates the burst (30) from the sustained rate (10 per minute) and refills while idle. A fixed
+window allows double the limit across a window boundary. A sliding window would need a limit of 20 or more
+per window to allow the burst, which also allows 20 a minute forever. Login is anonymous, so IP is the only partition
+available, and a fixed window is simple and predictable there.
+
+**Pipeline order:** exception handler, status-code pages, HTTPS redirection, **CORS**, **authentication**, **rate
+limiting**, **authorization**, controller, then the **idempotency check** inside `ContributionService`.
+- CORS first: preflights carry no token, and every later response, including 401 and 429, must carry CORS headers.
+- Authentication before rate limiting: the money policies partition by user id, which needs the identity.
+- Rate limiting before authorization: the stokvel authorization handlers query the database, so refusing early
+  protects it.
+- Idempotency last: it needs a validated, authorized request, and because the limiter sits earlier, a 429 never reaches it.
+
+**How idempotency survives a 429.** The limiter rejects before the controller, and the key is only read and stored
+inside `ContributionService`. A rejected request therefore never uses its key. After the window, the same key
+is recorded once (201). A third send replays (200 + `Idempotency-Replayed: true`). The test
+`A_429_does_not_use_up_the_idempotency_key_and_the_contribution_is_recorded_exactly_once` proves it: it exhausts a
+bucket of 2, gets a 429 for key K (nothing recorded), waits out the 3 s refill, sends K (201), sends K again
+(200 replay), and asserts exactly one contribution row exists. A replay also costs a token; I accept that.
+
+**Three instances behind a load balancer.** The limiters are in memory per process, so each instance counts on its
+own. A client spread over three instances gets up to three times the limit (login 30 per minute per IP instead of 10).
+Also, every request arrives from the load balancer's address unless `ForwardedHeaders` is configured with trusted proxies,
+so all users would share one login bucket. And the idempotency store is also in memory per instance (from earlier
+weeks), so a retry that lands on another instance would not replay. A real deployment needs a shared limiter (a
+gateway such as Azure Front Door or API Management, or a Redis-backed limiter), forwarded-header handling, and idempotency
+keys stored in PostgreSQL.
+
+**A whole stokvel on one venue's Wi-Fi.** The login limit is per IP and a venue sits behind one public address, so
+members logging in at the same moment share one bucket of 10 per minute, and some would get a 429 and have to wait for
+`Retry-After`. That is why the login limit is 10, not 5. Money endpoints are unaffected because they are per user. A
+fix would be to partition by IP plus email, at the cost of making it easier for an attacker to rotate emails.
+
+### 4. Home screen: `GET /api/v1/me/home`
+Designed from the screen backwards: one response for every stokvel the caller belongs to. A user in no stokvels
+gets `{"stokvels": []}` with 200.
+| Field | Why it is there |
+|---|---|
+| `stokvels[].stokvelId` | the screen links to the stokvel |
+| `stokvels[].name` | shown |
+| `stokvels[].role` | the caller's role in THAT stokvel (`Member`, `Treasurer`, `Admin`), a name not a number; one person has different roles in different stokvels |
+| `stokvels[].currentCycle` (`id`, `label`) | the newest open cycle; `null` if none |
+| `currentCycle.paidCents` | what the CALLER paid this cycle (only their rows are read) |
+| `currentCycle.owedCents` | target minus paid, never below zero; calculated on the server |
+| `stokvels[].nextPayoutDueUtc` | UTC date-time; the cycle has no payout date of its own, so it is the cycle start plus one period (week, fortnight, month) from the stokvel's frequency, rolled forward past "now" using `TimeProvider`. `null` if no open cycle |
+No other member's name, id or contribution amount is included: the screen does not show them. **Money** is integer cents
+(`long`): a JavaScript number holds integers exactly up to 2^53, so cents arithmetic is exact; decimal strings would also
+be exact but force parsing and conflict with "numbers are numbers". Field names end in `Cents`. The response is built
+with three queries however many stokvels there are.
+
+### 5. Error contract
+Every error is `application/problem+json` with `type`, `title`, `status`, `detail`, `instance`, `correlationId`
+(the W3C trace id; also the `X-Correlation-Id` header). Validation errors add `errors`.
+| Status | Where it comes from | Shape / code |
+|---|---|---|
+| 400 | `ValidationFilter` + FluentValidation | `title: validation.failed`, `errors: { "<camelCaseField>": ["message", ...] }` |
+| 400 | malformed body, or a number sent as a string (strict numbers) | `title: request.malformed`, `detail` names only the field path; no type name or exception text |
+| 400 | other rule violations (paging, missing Idempotency-Key, missing If-Match) | standard shape, `title` = our code |
+| 401 | JwtBearer challenge (`ProblemResponseWriter`) | `auth.unauthenticated`, `auth.token_expired`; `WWW-Authenticate` header |
+| 401 | `AuthenticationFailedException` (login, refresh) | `auth.invalid_credentials`, `auth.refresh_*` |
+| 403 | platform-role check (`ProblemResponseWriter`) | `auth.forbidden` |
+| 403 | member with too low a role (`ForbiddenException`) | `stokvel.forbidden` |
+| 404 | `NotFoundException`, also a non-member asking about a stokvel (same code and message as a missing one) | `stokvel.not_found`, `payout.not_found`, ... |
+| 404 / 405 / 415 | the framework (unknown route, wrong method, wrong content type) | same shape; `title: http.<status>`, generic `detail` |
+| 409 | `ConflictException`, concurrency, unique violation, Idempotency-Key reuse | our code, e.g. `user.email_taken`, `concurrency.stale_version` |
+| 422 | `UnprocessableException` | our code, e.g. `contribution.not_a_member` |
+| 429 | rate limiter | `rate_limit.exceeded`, `Retry-After` header |
+| 500 | anything unexpected | `unexpected_error`, fixed detail "Something went wrong on our side. Please quote the correlationId..."; no type name, stack trace or message |
+Strict numbers: `NumberHandling = Strict` is set on both the MVC JSON options (parsing) and the HTTP JSON options (read by the
+OpenAPI generator). I checked the generated `openapi.json`, not only the settings: **[FILL IN: say what you saw
+for `amount`, e.g. `"type": "number"` only]**. A test walks the whole document and fails if any schema type is
+"integer or string" or "number or string".
+
+### 6. The contract as code
+`clients/typescript/` has its own `package.json` with exact versions of `openapi-typescript` and `typescript`.
+`npm run contract` (API running) fetches `openapi.json`, generates `src/api.d.ts`, and runs `tsc --noEmit --strict`
+on `src/owed.ts`, which uses the home-screen type (`totalOwedCents`).
+**Before (compiles cleanly):**
+    [FILL IN: your npm run contract output]
+**After renaming `OwedCents` to `OwingCents` in C#:**
+    [FILL IN: paste the tsc error, e.g. error TS2339: Property 'owedCents' does not exist on type ...]
+The rename was reverted and the check is clean again.
+
+### 7. Test result with the dev database stopped
+[FILL IN: where it ran (GitHub Actions ubuntu-latest has no dev database; Docker Desktop does not start on my laptop)
+and the summary line: Passed! - Failed: 0, Passed: N, Skipped: 0, Total: N]
+
+### 8. Gaps
+- Limiters and the idempotency store are in memory per instance (see load balancer above).
+- `ForwardedHeaders` is not configured, so behind a proxy all logins would share one IP.
+- Next payout date is derived from the cycle start and the frequency, not from a stored date.
+- No `/api/v2` and no deprecation headers: there is one version.
+- A replayed request costs a rate-limit token.
+- The login limit is per IP, not per account, so a stokvel on one Wi-Fi shares it.
+- Next.js over http with an https API breaks the Strict cookie in Chromium; the dev setup must match schemes.
