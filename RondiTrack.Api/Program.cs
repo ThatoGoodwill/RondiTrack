@@ -183,6 +183,7 @@ builder.Services.AddScoped<PayoutService>();
 builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
     sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IHomeService, HomeService>();
 
 // ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
