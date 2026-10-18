@@ -1,0 +1,14 @@
+﻿**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+**/TestResults/
+**/*.user
+.env
+.env.*
+!.env.example
+RondiTrack.Api.Tests/
+RondiTrack.SeedVolume/
+clients/
+*.md

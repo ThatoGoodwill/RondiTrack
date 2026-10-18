@@ -1407,3 +1407,191 @@ and the summary line: Passed! - Failed: 0, Passed: N, Skipped: 0, Total: N]
 - A replayed request costs a rate-limit token.
 - The login limit is per IP, not per account, so a stokvel on one Wi-Fi shares it.
 - Next.js over http with an https API breaks the Strict cookie in Chromium; the dev setup must match schemes.
+
+## ## Assignment 6.4: Shipped, Scheduled and Handed Over
+
+**CI evidence.** Red run (deliberately broken test): [FILL IN link]. Green run after the fix: [FILL IN link]. The pull request, which stays open in the history: #[FILL IN]. Status badge at the top of this file.
+
+### 1. Container image
+
+- **Multi-stage Dockerfile.** The SDK stage copies only the three `.csproj` files and runs `dotnet restore` first, so that layer is cached until a package or project reference changes. Then it copies the source and publishes. The runtime stage (`aspnet:10.0`) contains only the published output, runs as the image's non-root user (`USER 1654`, the `app` user) and listens on port 8080 (`ASPNETCORE_HTTP_PORTS=8080`).
+- **`.dockerignore`** excludes `bin/`, `obj/`, `.git/`, test results, the test project and `.env`.
+- **Size:** 357 MB (`docker images`). The published app is 12.3 MB of that. The rest is the ASP.NET runtime and its Ubuntu base. The SDK is not in the image.
+- **First build vs code-only rebuild** (same Codespace):
+  - First build with `--no-cache`: **33.4 s**. (The very first build on a clean machine took 74 s because it also downloaded the .NET images.)
+  - After a one-line code change: **18.9 s**. The restore layer came from cache, because only source files changed and no `.csproj` did. Only the publish step and the final copy re-ran.
+- **Why the test project is not in the image.** The image is what runs in production. Tests need the SDK and Docker (Testcontainers), add size and attack surface, and do nothing at runtime. They run in CI before the image is built, and `.dockerignore` keeps the test project out of the build context.
+- **No secrets in the image.**
+  - `docker history --no-trunc` shows only build steps: the base image's layers, `ENV ASPNETCORE_HTTP_PORTS=8080`, `WORKDIR /app`, `COPY /app/publish .`, `USER 1654` and the `ENTRYPOINT`. None contains a password, key or connection string.
+  - `docker inspect --format '{{json .Config.Env}}'` prints:
+```
+    ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin","APP_UID=1654","ASPNETCORE_HTTP_PORTS=8080","DOTNET_RUNNING_IN_CONTAINER=true","DOTNET_VERSION=10.0.13","ASPNET_VERSION=10.0.13"]
+```
+  - No secret is given to the build, so none can end up in a layer. Secrets arrive when the container starts, as environment variables.
+- **Fails fast with no configuration.** `docker run --rm ronditrack-api:local` stops within about a second, before listening, with a non-zero exit code (139 in this run):
+```
+  Unhandled exception. System.InvalidOperationException: Setting 'ConnectionStrings__RondiTrack' is missing (the database connection string). In Docker or on a server set it as the environment variable ConnectionStrings__RondiTrack. For local development: dotnet user-secrets set "ConnectionStrings:RondiTrack" "<your connection string>" --project RondiTrack.Api
+     at Program.<Main>$(String[] args) in /src/RondiTrack.Api/Program.cs:line 78
+```
+  It names the missing setting. A missing signing key stops startup the same way, naming `Jwt__SigningKey`. CI also runs this check on every build.
+
+### 2. Compose design
+
+- `postgres` has a `pg_isready` health check, and `api` has `depends_on: condition: service_healthy`, so the API never starts against a database that isn't ready.
+- **The health check must test the network port.** My first version ran `pg_isready` with no host, which uses the Unix socket. On a first start with an empty volume, the Postgres image runs a temporary server that listens only on that socket. The check passed, the API started too early and crashed. The fix is `pg_isready -h 127.0.0.1 ...`, which passes only when the real TCP port is open. (Commit: "Fix Postgres health check to test the network port, not the init socket".)
+- **Data** lives in the named volume `ronditrack-pgdata`. Postgres publishes **no** host port: only containers on the compose network can reach it.
+- **Secrets** all come from `.env` through `${VAR:?message}`, so compose refuses to start when one is missing. `.env.example` lists the names with no values. `.env` is git-ignored. `git log --all -- .env` prints nothing: [paste the empty output].
+- **The connection string uses `Host=postgres`, not `localhost`.** Inside the api container, `localhost` is the api container itself. Compose gives every service a DNS name equal to its service name.
+- Postgres `17.6` and the .NET `10.0` images are pinned. Nothing uses `latest`.
+- **Proof it starts on a clean machine:** the CI job `compose-smoke` creates a throwaway `.env` with random values, runs `docker compose up --build -d` and waits for `/health/ready` to answer `Healthy`. Run: [FILL IN link].
+- **Where I could not run it locally.** Docker Desktop does not start on my laptop, so I used GitHub Codespaces. There, image builds and Testcontainers tests worked (57 of 57 existing tests passed), but container-to-container traffic did not: a test container on the compose network got `no response` from Postgres, including ping, while Postgres itself was healthy. This is a Codespaces networking limitation, not a project fault, so the full-stack proof comes from the CI runner.
+
+### 3. `docker compose up --scale api=2` and migrations
+
+Both replicas call `MigrateAsync()` at startup at nearly the same moment. EF Core handles this: the logs show `LOCK TABLE "__EFMigrationsHistory" IN ACCESS EXCLUSIVE MODE` before it reads the applied migrations. One replica gets the lock and applies the migrations, and the other waits, then sees `No migrations were applied. The database is already up to date.`
+
+**Observed:** [FILL IN what the CI or runner logs showed with `--scale api=2`].
+
+This is fine for a demo, but I would not rely on it in production. A failing migration would crash every replica at startup, and the application's database user needs permission to change the schema. **For production:** run migrations once, as a separate one-shot step (a compose service, or a migrations bundle in the deploy pipeline) that finishes before any API replica starts, and give the API a database user that can read and write data but cannot alter the schema.
+
+Ports: the API publishes the range `8080-8089`, so replicas get different host ports.
+
+### 4. CI (GitHub Actions)
+
+- Triggers: push to `main`, and every pull request.
+- Job `test`: `dotnet restore`, `dotnet build --configuration Release`, `dotnet test` (including the Testcontainers tests; the runner has Docker).
+- Job `image` (`needs: test`): builds the Docker image only if all tests passed, prints the size, `docker history` and environment, and checks that running it with no configuration fails and names `ConnectionStrings__RondiTrack`.
+- Job `compose-smoke` (`needs: test`): see section 2.
+- **No secrets** are in the workflow or in GitHub. Testcontainers creates its own throwaway passwords and the smoke test generates its own `.env` at run time.
+- Actions are pinned to a major version: `actions/checkout@v5`, `actions/setup-dotnet@v5`. None uses a branch.
+- **Red then green.** PR #[FILL IN] changed one assertion so a test failed: [red run link]. A revert commit fixed it: [green run link]. The PR was merged, the branch is kept and the PR stays visible.
+
+### 5. Cycle-close job
+
+- **What it does.** On a configurable interval (`CycleClose__IntervalMinutes`, default 15) it finds every stokvel with an open cycle whose end date has passed, closes it, records arrears for every member who paid less than the target (shortfall in **cents**), and opens the next cycle.
+- **When a cycle closes.** `EndsOn` is a date in `Africa/Johannesburg` (UTC+2, no daylight saving) and is the last day of the cycle. The job closes it when the SAST date is after `EndsOn`. A cycle ending "on the 25th" therefore closes at 00:00 SAST on the 26th, which is **22:00 UTC on the 25th**. Test: `The_cycle_closes_at_midnight_SAST_not_midnight_UTC` (23:59 SAST open, 00:00 SAST closed).
+- **Time handling.** "Now" comes from the injected `TimeProvider`. "Today" is computed in the stokvel's time zone, never from the container's local time. Neither the job nor the code it calls uses `DateTime.Now` or `DateTime.UtcNow`. The runtime image includes `tzdata`, which `Africa/Johannesburg` needs.
+- **Exactly once, enforced by the database.**
+  - Closing is `UPDATE ... SET Status = Closed WHERE Id = @id AND Status = Open`. Only one caller can win it.
+  - Arrears have a unique index on `(ContributionCycleId, UserId)`.
+  - The next cycle has a filtered unique index on `(StokvelId, EndsOn)`.
+  - None of this relies on a C# check.
+- **One transaction per stokvel.** The claim, the arrears and the next cycle commit together or not at all. A crash midway leaves that stokvel untouched.
+- **Isolation.** Each stokvel gets its own scope and transaction. A failure is caught, logged with the stokvel id and retried on the next tick. Other stokvels are not affected, and `RunOnceAsync` never throws, so the job cannot take the API down.
+- **Catch-up decision.** If a stokvel is several periods behind (for example, the API was down over a long weekend), the job closes the overdue cycle, with arrears, and opens exactly **one** new cycle: the first period whose end date is today or later. Missed periods are **not** backfilled. Reason: nobody could pay through a down API, so backfilled cycles would put every member into arrears for periods in which paying was impossible. A second run changes nothing. Test: `A_stokvel_three_cycles_behind_ends_with_one_closed_cycle_and_one_current_cycle`.
+- **Arrears rule.** For every current member, `shortfall = target cents - paid cents`. A row is written only when the shortfall is above zero. Members who paid in full get none.
+- **A closed cycle** refuses new contributions with `422 contribution.cycle_closed`.
+- **Observability.** The job runs inside its own span, `cycle_close.run`, tagged with counts only. Counters: `ronditrack.cycles.closed`, `ronditrack.arrears.recorded`, `ronditrack.cycle_close.failures`. Logs follow the 6.2 rules: ids and counts only, never names, phone numbers or ID numbers.
+- **Testability.** `RunOnceAsync()` is public; the clock (`TimeProvider`), the interval and the time zone are injected.
+- **Two replicas running at the same second.** Both run the job and both try the conditional update. The second one waits for the first to commit, re-checks `Status = Open`, matches 0 rows and does nothing. Result: one closure, one set of arrears, one next cycle. Test: `Two_runs_at_the_same_time_close_each_cycle_once_and_record_each_members_arrears_once` (two `RunOnceAsync` calls through `Task.WhenAll`, each with its own scopes).
+
+### 6. Housekeeping and retention
+
+| Data | Setting | Default | Why |
+|---|---|---|---|
+| Refresh tokens | `Housekeeping__RefreshTokenRetentionDays` (N) | 30 days **after expiry** | Reuse detection needs spent tokens to still exist. A presented token that is found and already revoked kills its whole family (`auth.refresh_reused`). If tokens vanished the moment they expired, an old stolen token would look unknown (`auth.refresh_invalid`) and the alarm and revocation would never fire. 30 days gives time to notice and investigate a replay. Refresh tokens live 7 days, so the longest evidence kept is about 37 days. |
+| Idempotency keys | `Housekeeping__IdempotencyRetentionDays` (M) | 7 days | A client may retry after an offline weekend or a queued mobile retry, so a few days is realistic and 7 adds margin. If a retry arrives after its record is gone, it is treated as new, but the unique index `UX_Contributions_Stokvel_User_Cycle` still refuses a second payment (409), so money stays safe; the client just gets a 409 instead of the replayed original answer. |
+
+Both deletes are set-based (`ExecuteDeleteAsync`; nothing is loaded into memory) and safe to run twice or on two replicas. Idempotency keys now live in a PostgreSQL table (`IdempotencyKeys`) instead of memory, so they survive restarts and work across replicas.
+
+### 7. Tests
+
+- Cycle close: an ended cycle closes with correct arrears in cents, none for full payers, and the next cycle exists; a cycle ending tomorrow is untouched.
+- Time-zone boundary: 23:59 SAST open, 00:00 SAST closed, using `FakeTimeProvider`.
+- Idempotent: two runs equal one run. Concurrent: `Task.WhenAll` of two runs. Catch-up: three cycles behind ends in the promised state, and a rerun changes nothing. Isolation: a poisoned stokvel does not stop another, and the job does not throw.
+- Housekeeping: a token inside retention survives and one past it is deleted; reuse detection still works on a token that expired yesterday; an idempotency record inside retention still replays.
+- **Result with no dev database running:** [FILL IN: `Test summary: total: N, failed: 0, succeeded: N` from the CI run, and the link]. The 57 existing tests also passed before the new ones were added (Codespace, no development database present, Testcontainers only).
+
+## Run it and build against it
+
+### Run it with only Docker installed
+```
+git clone <repo-url> ronditrack
+cd ronditrack
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+# fill in EVERY value in .env (see "Secrets" below), then:
+docker compose up --build
+```
+The first start applies migrations and seeds demo data. When the log shows the API listening, it is ready.
+
+**Secrets (generate your own; never share or commit them).** `POSTGRES_USER` and `POSTGRES_DB` can be `ronditrack`. For the others use long random values. For example, in PowerShell: `[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))`. Avoid `$` in values. `JWT_SIGNING_KEY` must be at least 32 bytes.
+
+### URLs (the first replica is on port 8080)
+| What | URL |
+|---|---|
+| API base | `http://localhost:8080/api/v1` |
+| Scalar (interactive docs) | `http://localhost:8080/scalar/v1` |
+| OpenAPI document | `http://localhost:8080/openapi/v1.json` |
+| Liveness / readiness | `http://localhost:8080/health/live`, `http://localhost:8080/health/ready` |
+
+Scalar and OpenAPI exist only when `ASPNETCORE_ENVIRONMENT=Development`, which compose sets for local runs.
+
+### Demo accounts
+The password for all of them is the `SEED_USERS_PASSWORD` you put in `.env`.
+| Email | Notes |
+|---|---|
+| [SeedDemo from DevelopmentSeeder.cs] | **one member in two stokvels** (different role in each) |
+| [admin123] | admin of a stokvel |
+| [DemoPass123] | belongs to no stokvel (the home screen returns an empty list) |
+
+### Authentication flow
+1. `POST /api/v1/auth/register` (optional) creates an account.
+2. `POST /api/v1/auth/login` with `{ "email", "password" }` returns the access token in the JSON body (valid 10 minutes) and sets the refresh cookie `refresh_token` (HttpOnly, Secure, SameSite=Strict, Path `/api/v1/auth`, 7 days). JavaScript cannot read it.
+3. Send `Authorization: Bearer <accessToken>` on every other call.
+4. When the token expires, call `POST /api/v1/auth/refresh` with `credentials: "include"` and no body. You get a new access token and a **new** cookie; the old refresh token is now spent.
+5. **Replaying a spent refresh token** returns `401 auth.refresh_reused` and revokes the whole token family, so the user must sign in again. Never retry an old cookie.
+6. `POST /api/v1/auth/logout` revokes the family (safe to call twice).
+
+### The 6.3 rules from the frontend's point of view
+- **CORS:** only the origins in `Cors__AllowedOrigins__N` (default `http://localhost:3000`). Use `credentials: "include"` on refresh and logout. Allowed request headers: `Content-Type`, `Authorization`, `Idempotency-Key`, `If-Match`, `traceparent`. Readable response headers: `Retry-After`, `Idempotency-Replayed`, `X-Correlation-Id`, `ETag`, `Location`.
+- **Rate limits:** login 10 per minute per IP; contributions burst 30, refilling 10 per minute per user; payouts burst 10, refilling 2 per minute per user. A rejection is `429` with `Retry-After` (seconds) and a problem+json body (`rate_limit.exceeded`). Wait that long and retry with the **same** `Idempotency-Key`.
+- **Idempotency-Key:** required on `POST .../contributions` (at most 200 characters). Use a fresh UUID per user action and reuse it for retries. Same key and same body gives `200` with `Idempotency-Replayed: true` and the original response. Same key with a different body gives `409`. A `429` does not consume the key. Keys are remembered for 7 days.
+
+### Error table
+[Paste your 6.3 error table here, and make sure it includes these:]
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `request.malformed` / `validation.failed` | bad body or field values |
+| 400 | `contribution.idempotency_key_too_long` | Idempotency-Key over 200 characters |
+| 401 | `auth.unauthenticated` | no or invalid access token |
+| 401 | `auth.invalid_credentials` | wrong email or password |
+| 401 | `auth.refresh_invalid` / `auth.refresh_expired` / `auth.refresh_reused` | refresh cookie problems (reused = family revoked) |
+| 404 | `stokvel.not_found` | no such stokvel, or you are not a member (same answer on purpose) |
+| 409 | `user.email_taken`, duplicate contribution, idempotency key reused with a different body | conflicts |
+| 422 | `contribution.cycle_closed` | the cycle has been closed by the job |
+| 429 | `rate_limit.exceeded` | slow down; see `Retry-After` |
+
+### Regenerate the TypeScript types
+With the API running: `cd clients/typescript && npm ci && npm run contract`. For the Docker API, download the document and generate from it: `curl -sS -o openapi.json http://localhost:8080/openapi/v1.json && npm run generate && npm run check`.
+
+### Configuration (environment-variable form)
+| Variable | Required | Secret | Purpose |
+|---|---|---|---|
+| `ConnectionStrings__RondiTrack` | yes | **yes** | database connection string |
+| `Jwt__SigningKey` | yes | **yes** | signs access tokens (32+ bytes) |
+| `SeedUsers__Password` | only for demo seeding (Development) | **yes** | password of the demo accounts |
+| `Jwt__Issuer`, `Jwt__Audience` | no (in appsettings.json) | no | token issuer and audience |
+| `Jwt__AccessTokenMinutes` (10), `Jwt__RefreshTokenDays` (7) | no | no | token lifetimes |
+| `Cors__AllowedOrigins__0` (`__1`, ...) | yes for a browser frontend | no | allowed origins |
+| `RateLimiting__Login__*`, `RateLimiting__Contributions__*`, `RateLimiting__Payouts__*` | no | no | rate limits (see appsettings.json for names) |
+| `CycleClose__Enabled`, `__IntervalMinutes`, `__TimeZoneId` | no | no | cycle-close job (true, 15, Africa/Johannesburg) |
+| `Housekeeping__Enabled`, `__IntervalMinutes`, `__RefreshTokenRetentionDays`, `__IdempotencyRetentionDays` | no | no | housekeeping job (true, 60, 30, 7) |
+| `ASPNETCORE_ENVIRONMENT` | no | no | `Development` enables Scalar, OpenAPI and demo seeding |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | no | where telemetry is exported; none if unset |
+| `POSTGRES_USER`, `POSTGRES_DB` | yes (compose) | no | database name and user |
+| `POSTGRES_PASSWORD` | yes (compose) | **yes** | database password |
+
+## Before production
+- Run as `Production`: no Scalar and no demo seeding. Compose runs as `Development` only so the demo works.
+- Run migrations as a separate one-shot step, with a database user that cannot change the schema.
+- TLS and forwarded headers: the container speaks plain HTTP. Put it behind a TLS-terminating proxy and configure forwarded headers with trusted proxies, otherwise the login rate limit sees one IP.
+- The rate limiters are in memory per replica; use a shared limiter or a gateway when running more than one replica.
+- Secrets sit in a plain `.env` file; use a secret manager. Rotate the 6.1 signing key and database password, which were exposed earlier.
+- A contribution recorded in the same instant a cycle closes can slip between the arrears calculation and its commit; lock the cycle row while recording to close this.
+- Arrears are not pro-rated: a member who joined mid-cycle is assessed for the whole target. Monthly cycles that end on the 29th to 31st can drift to an earlier day.
+- Arrears have no clearing or payment flow and no notifications yet. A cycle or user that has arrears cannot be deleted (foreign key restrict).
+- Recording a contribution and saving its idempotency key are two saves, not one transaction.
+- No container health check on the API, no image scanning, no backup of the Postgres volume.
+- The scheduler is a plain `BackgroundService`. I would move to Quartz or Hangfire for cron expressions, a job-history UI or distributed locking across many nodes.
+- Seeded cycles have no end date, so the job never closes them; only cycles created with an end date are closed.
+

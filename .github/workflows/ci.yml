@@ -1,0 +1,43 @@
+﻿name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+      - run: dotnet test --configuration Release --no-build --verbosity normal
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the image
+        run: docker build --tag ronditrack-api:ci .
+      - name: Image size, layers and environment (evidence for the README)
+        run: |
+          docker images ronditrack-api:ci
+          docker history --no-trunc ronditrack-api:ci
+          docker inspect ronditrack-api:ci --format 'Env: {{json .Config.Env}}'
+          docker inspect ronditrack-api:ci --format 'User: {{.Config.User}}'
+      - name: With no configuration the container must fail immediately and name the setting
+        run: |
+          set +e
+          docker run --rm ronditrack-api:ci 2>&1 | tee run.log
+          code=${PIPESTATUS[0]}
+          echo "exit code: $code"
+          test "$code" -ne 0
+          grep -q "ConnectionStrings__RondiTrack" run.log

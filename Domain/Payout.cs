@@ -9,10 +9,10 @@ public sealed class Payout
  private Payout(Guid id, Guid stokvelId, Guid contributionCycleId, Guid recipientUserId,
  decimal amount, DateTimeOffset processedAt)
  {
- Id = id;
- StokvelId = stokvelId;
- ContributionCycleId = contributionCycleId;
- RecipientUserId = recipientUserId;
+      Id = id;
+       StokvelId = stokvelId;
+      ContributionCycleId = contributionCycleId;
+       RecipientUserId = recipientUserId;
  Amount = amount;
  ProcessedAt = processedAt;
  }
@@ -41,5 +41,6 @@ public sealed class Payout
 public enum ContributionCycleStatus
 {
     Open = 1,
-    PaidOut = 2
+    PaidOut = 2,
+    Closed = 3
 }

@@ -30,6 +30,7 @@ using RondiTrack.Infrastructure.Data;
 using Scalar.AspNetCore;
 using RondiTrack.Api.Frontend;
 using System.Text.Json.Serialization;
+using RondiTrack.Api.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,8 +78,9 @@ builder.Services.AddOpenApi(options =>
 // ---- Secrets: fail at startup, with the fix in the message ----
 var connectionString = builder.Configuration.GetConnectionString("RondiTrack")
     ?? throw new InvalidOperationException(
-        "Connection string 'RondiTrack' was not found. Set it with: " +
-        "dotnet user-secrets set \"ConnectionStrings:RondiTrack\" \"<your connection string>\" --project RondiTrack.Api");
+        "Setting 'ConnectionStrings__RondiTrack' is missing (the database connection string). " +
+        "In Docker or on a server set it as the environment variable ConnectionStrings__RondiTrack. " +
+        "For local development: dotnet user-secrets set \"ConnectionStrings:RondiTrack\" \"<your connection string>\" --project RondiTrack.Api");
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 jwtOptions.EnsureValid();
@@ -173,8 +175,8 @@ builder.Services.AddScoped<IContributionRepository, EfContributionRepository>();
 builder.Services.AddScoped<IContributionCycleRepository, EfContributionCycleRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
-// The idempotency store is still in memory (a Singleton), so it keeps its lifetime.
-builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+// 6.4: idempotency keys live in PostgreSQL (Scoped, because it holds a DbContext).
+builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 
 // Services depend on Scoped repositories, so they are Scoped too.
 builder.Services.AddScoped<IUserService, UserService>();
@@ -188,6 +190,20 @@ builder.Services.AddScoped<PayoutService>();
 builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
     sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
+// ---- 6.4 background jobs: bad settings stop the app at startup, naming the setting ----
+var cycleCloseOptions = builder.Configuration.GetSection(CycleCloseOptions.SectionName).Get<CycleCloseOptions>() ?? new CycleCloseOptions();
+cycleCloseOptions.EnsureValid();
+builder.Services.Configure<CycleCloseOptions>(builder.Configuration.GetSection(CycleCloseOptions.SectionName));
+
+var housekeepingOptions = builder.Configuration.GetSection(HousekeepingOptions.SectionName).Get<HousekeepingOptions>() ?? new HousekeepingOptions();
+housekeepingOptions.EnsureValid();
+builder.Services.Configure<HousekeepingOptions>(builder.Configuration.GetSection(HousekeepingOptions.SectionName));
+
+builder.Services.AddSingleton<JobMetrics>();
+builder.Services.AddSingleton<CycleCloseJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CycleCloseJob>());
+builder.Services.AddSingleton<HousekeepingJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HousekeepingJob>());
 builder.Services.AddScoped<IHomeService, HomeService>();
 
 // ---- Centralized error handling ----

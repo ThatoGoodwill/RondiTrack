@@ -37,6 +37,9 @@ public sealed class ContributionService(
         if (string.IsNullOrWhiteSpace(idempotencyKey))
             return Fail(ErrorType.Validation, "contribution.idempotency_key_required",
                 "An Idempotency-Key header is required.");
+        if (idempotencyKey.Length > 200)
+            return Fail(ErrorType.Validation, "contribution.idempotency_key_too_long",
+                "The Idempotency-Key header cannot exceed 200 characters.");
 
         // ---- B. have we seen this key before? (checked FIRST, before any business data) ----
         // The fingerprint covers everything that makes the request "the same request".
@@ -68,6 +71,10 @@ public sealed class ContributionService(
         if (cycle is null || cycle.StokvelId != stokvelId)
             return Fail(ErrorType.Unprocessable, "contribution.cycle_not_found",
                 "No such contribution cycle exists for this stokvel.");
+                        // 6.4: a closed cycle has its arrears written; a late payment would contradict them.
+        if (cycle.Status == ContributionCycleStatus.Closed)
+            return Fail(ErrorType.Unprocessable, "contribution.cycle_closed",
+                "This contribution cycle has been closed. Contact the treasurer.");
 
         if (await contributions.ExistsAsync(stokvelId, request.UserId, request.ContributionCycleId, ct))
             return Fail(ErrorType.Conflict, "contribution.already_recorded",
