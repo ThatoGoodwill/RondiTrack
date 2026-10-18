@@ -41,5 +41,6 @@ public sealed class Payout
 public enum ContributionCycleStatus
 {
     Open = 1,
-    PaidOut = 2
+    PaidOut = 2,
+    closed = 3
 }

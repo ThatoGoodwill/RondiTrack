@@ -174,8 +174,8 @@ builder.Services.AddScoped<IContributionRepository, EfContributionRepository>();
 builder.Services.AddScoped<IContributionCycleRepository, EfContributionCycleRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
-// The idempotency store is still in memory (a Singleton), so it keeps its lifetime.
-builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+// 6.4: idempotency keys live in PostgreSQL (Scoped, because it holds a DbContext).
+builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 
 // Services depend on Scoped repositories, so they are Scoped too.
 builder.Services.AddScoped<IUserService, UserService>();

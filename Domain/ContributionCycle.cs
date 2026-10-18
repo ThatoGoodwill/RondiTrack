@@ -1,16 +1,11 @@
 namespace RondiTrack.Domain;
 
-// ---------------------------------------------------------------------------------
-// NEW IN 4.3: a specific collection period for ONE stokvel.
-//   e.g. Label "2026-09", TargetAmount R500  ->  "September 2026, R500 per member".
-//
-// It only protects its OWN fields (label + amount). Whether the parent stokvel
-// exists is a cross-entity question, so that check lives in the controller.
-// ---------------------------------------------------------------------------------
+// A specific collection period for ONE stokvel, e.g. Label "2026-09", TargetAmount R500 per member.
+// 6.4: it can have an end date (a DATE in the stokvel's own calendar, Africa/Johannesburg, inclusive).
+// The cycle-close job closes it at 00:00 the next day, exactly once.
 public sealed class ContributionCycle
 {
-    
-    private readonly object _sync = new(); 
+    private readonly object _sync = new();
     private readonly List<Contribution> _contributions = [];
 
     public const int MaxLabelLength = 40;
@@ -32,20 +27,27 @@ public sealed class ContributionCycle
 
     public Guid Id { get; }
     public Guid StokvelId { get; }                      // never changes after creation
-    public string Label { get; private set; }           // identifies the period, e.g. "2026-09"
-    public decimal TargetAmount { get; private set; }   // amount expected from each member (ZAR)
+    public string Label { get; private set; }
+    public decimal TargetAmount { get; private set; }   // expected from each member (ZAR)
     public DateTimeOffset CreatedAt { get; }
+
+    public DateOnly? EndsOn { get; private set; }       // last day of the cycle, SAST; null = never closed by the job
+    public DateTimeOffset? ClosedAt { get; private set; }
 
     public ContributionCycleStatus Status { get; private set; } = ContributionCycleStatus.Open;
     public void MarkPaidOut() => Status = ContributionCycleStatus.PaidOut;
 
-    public static Result<ContributionCycle> Create(Guid stokvelId, string? label, decimal targetAmount)
+    // createdAt: the cycle-close job passes the injected clock's "now". Everyone else leaves it null (real time).
+    public static Result<ContributionCycle> Create(Guid stokvelId, string? label, decimal targetAmount,
+        DateOnly? endsOn = null, DateTimeOffset? createdAt = null)
     {
         var error = Validate(stokvelId, label, targetAmount);
         if (error is not null) return Result<ContributionCycle>.Failure(error);
 
-        return Result<ContributionCycle>.Success(new ContributionCycle(
-            Guid.CreateVersion7(), stokvelId, label!.Trim(), targetAmount, DateTimeOffset.UtcNow));
+        var cycle = new ContributionCycle(
+            Guid.CreateVersion7(), stokvelId, label!.Trim(), targetAmount, createdAt ?? DateTimeOffset.UtcNow);
+        cycle.EndsOn = endsOn;
+        return Result<ContributionCycle>.Success(cycle);
     }
 
     // Validate EVERYTHING first, then assign: a failed update leaves the cycle unchanged.

@@ -12,6 +12,8 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
     public DbSet<Contribution> Contributions => Set<Contribution>();
     public DbSet<Payout> Payouts => Set<Payout>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();   // 6.1
+    public DbSet<ArrearsRecord> ArrearsRecords => Set<ArrearsRecord>();             // 6.4
+    public DbSet<IdempotencyKeyEntry> IdempotencyKeys => Set<IdempotencyKeyEntry>(); // 6.4
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +74,19 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(c => c.CreatedAt);
             entity.Property(c => c.Label).HasMaxLength(ContributionCycle.MaxLabelLength).IsRequired();
             entity.Property(c => c.TargetAmount).HasPrecision(18, 2);
+            entity.Property(c => c.EndsOn);       // 6.4: a plain date
+            entity.Property(c => c.ClosedAt);
+
+            // 6.4: one cycle per stokvel per end date, so a "next cycle" can never be created twice.
+            // Filtered: older cycles without an end date are not affected.
+            entity.HasIndex(c => new { c.StokvelId, c.EndsOn })
+                .IsUnique()
+                .HasFilter("\"EndsOn\" IS NOT NULL")
+                .HasDatabaseName("UX_ContributionCycles_Stokvel_EndsOn");
+
+            // 6.4: the job's query ("open cycles that have ended").
+            entity.HasIndex(c => new { c.Status, c.EndsOn })
+                .HasDatabaseName("IX_ContributionCycles_Status_EndsOn");
 
             entity.HasMany(c => c.Contributions)
                 .WithOne()
@@ -113,6 +128,33 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
             entity.Property(p => p.ProcessedAt);
             entity.Property(p => p.Amount).HasPrecision(18, 2);
             entity.Property(p => p.Version).IsRowVersion();
+        });
+
+                // ---- ArrearsRecord (6.4) ----
+        modelBuilder.Entity<ArrearsRecord>(entity =>
+        {
+            entity.ToTable("ArrearsRecords");
+            entity.HasKey(a => a.Id);
+
+            // THE guarantee: a member can be put into arrears for a given cycle only once, whatever the code does.
+            entity.HasIndex(a => new { a.ContributionCycleId, a.UserId })
+                .IsUnique()
+                .HasDatabaseName("UX_ArrearsRecords_Cycle_User");
+
+            // A financial record: a cycle or user that has arrears cannot be deleted from under it.
+            entity.HasOne<ContributionCycle>().WithMany().HasForeignKey(a => a.ContributionCycleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ---- IdempotencyKeyEntry (6.4) ----
+        modelBuilder.Entity<IdempotencyKeyEntry>(entity =>
+        {
+            entity.ToTable("IdempotencyKeys");
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(200);
+            entity.Property(e => e.RequestHash).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ResponseBodyJson).IsRequired();
+            entity.HasIndex(e => e.CreatedAt).HasDatabaseName("IX_IdempotencyKeys_CreatedAt");   // housekeeping deletes by age
         });
 
         // ---- RefreshToken (6.1) ----
