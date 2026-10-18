@@ -22,7 +22,7 @@ public class JwtOptions
     {
         if (Encoding.UTF8.GetByteCount(SigningKey) < MinimumKeyBytes)
             throw new InvalidOperationException(
-                $"Jwt:SigningKey is missing or shorter than {MinimumKeyBytes} bytes. Set it with: " +
+                $"Jwt:SigningKey is missing or shorter than {MinimumKeyBytes} bytes. Set the environment variable Jwt__SigningKey (Docker or a server), or for local development: " +
                 "dotnet user-secrets set \"Jwt:SigningKey\" \"<at least 32 random characters>\" --project RondiTrack.Api");
 
         if (string.IsNullOrWhiteSpace(Issuer) || string.IsNullOrWhiteSpace(Audience))

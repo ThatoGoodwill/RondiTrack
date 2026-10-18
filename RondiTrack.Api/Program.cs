@@ -77,8 +77,9 @@ builder.Services.AddOpenApi(options =>
 // ---- Secrets: fail at startup, with the fix in the message ----
 var connectionString = builder.Configuration.GetConnectionString("RondiTrack")
     ?? throw new InvalidOperationException(
-        "Connection string 'RondiTrack' was not found. Set it with: " +
-        "dotnet user-secrets set \"ConnectionStrings:RondiTrack\" \"<your connection string>\" --project RondiTrack.Api");
+        "Setting 'ConnectionStrings__RondiTrack' is missing (the database connection string). " +
+        "In Docker or on a server set it as the environment variable ConnectionStrings__RondiTrack. " +
+        "For local development: dotnet user-secrets set \"ConnectionStrings:RondiTrack\" \"<your connection string>\" --project RondiTrack.Api");
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 jwtOptions.EnsureValid();
