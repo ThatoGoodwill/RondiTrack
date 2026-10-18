@@ -30,6 +30,7 @@ using RondiTrack.Infrastructure.Data;
 using Scalar.AspNetCore;
 using RondiTrack.Api.Frontend;
 using System.Text.Json.Serialization;
+using RondiTrack.Api.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -189,6 +190,20 @@ builder.Services.AddScoped<PayoutService>();
 builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
     sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
+// ---- 6.4 background jobs: bad settings stop the app at startup, naming the setting ----
+var cycleCloseOptions = builder.Configuration.GetSection(CycleCloseOptions.SectionName).Get<CycleCloseOptions>() ?? new CycleCloseOptions();
+cycleCloseOptions.EnsureValid();
+builder.Services.Configure<CycleCloseOptions>(builder.Configuration.GetSection(CycleCloseOptions.SectionName));
+
+var housekeepingOptions = builder.Configuration.GetSection(HousekeepingOptions.SectionName).Get<HousekeepingOptions>() ?? new HousekeepingOptions();
+housekeepingOptions.EnsureValid();
+builder.Services.Configure<HousekeepingOptions>(builder.Configuration.GetSection(HousekeepingOptions.SectionName));
+
+builder.Services.AddSingleton<JobMetrics>();
+builder.Services.AddSingleton<CycleCloseJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CycleCloseJob>());
+builder.Services.AddSingleton<HousekeepingJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HousekeepingJob>());
 builder.Services.AddScoped<IHomeService, HomeService>();
 
 // ---- Centralized error handling ----
