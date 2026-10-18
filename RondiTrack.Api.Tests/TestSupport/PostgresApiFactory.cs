@@ -54,6 +54,8 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("RateLimiting:Contributions:TokensPerPeriod", "100000");
         builder.UseSetting("RateLimiting:Payouts:TokenLimit", "100000");
         builder.UseSetting("RateLimiting:Payouts:TokensPerPeriod", "100000");
+        builder.UseSetting("CycleClose:Enabled", "false");     // tests construct their own jobs with a fake clock
+        builder.UseSetting("Housekeeping:Enabled", "false");
         // SeedUsers:Password is deliberately NOT set: the demo seeder skips, so every test starts from an empty database.
 
         // 6.2: one extra logger provider that remembers everything the app logs (see CapturingLoggerProvider).
