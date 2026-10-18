@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -21,7 +21,7 @@ public class CycleCloseTests(PostgresApiFactory factory)
     // ---------- helpers ----------
 
     private static DateTimeOffset SastTime(DateOnly date, int hour, int minute) =>
-        new(date.ToDateTime(new TimeOnly(hour, minute)), Sast);
+        new DateTimeOffset(date.ToDateTime(new TimeOnly(hour, minute)), Sast).ToUniversalTime();
 
     private CycleCloseJob NewJob(TimeProvider clock) => new(
         factory.Services.GetRequiredService<IServiceScopeFactory>(),

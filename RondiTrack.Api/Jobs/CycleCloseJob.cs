@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RondiTrack.Api.Observability;
@@ -56,7 +56,7 @@ public sealed class CycleCloseJob(
 
         try
         {
-            var now = clock.GetUtcNow();
+            var now = clock.GetUtcNow().ToUniversalTime();
             var today = CycleCalendar.TodayIn(_zone, now);
 
             List<Guid> stokvelIds;

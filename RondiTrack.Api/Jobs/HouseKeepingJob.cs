@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RondiTrack.Api.Observability;
@@ -60,7 +60,7 @@ public sealed class HousekeepingJob(
         using var activity = RondiTrackTelemetry.ActivitySource.StartActivity(SpanName);
         try
         {
-            var now = clock.GetUtcNow();
+            var now = clock.GetUtcNow().ToUniversalTime();
             var tokenCutoff = now.UtcDateTime.AddDays(-_options.RefreshTokenRetentionDays);   // expired MORE than N days ago
             var keyCutoff = now.AddDays(-_options.IdempotencyRetentionDays);                  // first seen MORE than M days ago
 
