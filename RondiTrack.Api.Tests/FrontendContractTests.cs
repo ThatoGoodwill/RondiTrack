@@ -258,6 +258,23 @@ public class FrontendContractTests(PostgresApiFactory factory)
         Assert.Equal(6000, cycle.OwedCents);
     }
 
+  [Fact]
+public async Task Home_includes_the_cycles_status_and_end_date()
+{
+    var treasurer = await factory.CreateUserAsync();
+    var me = await factory.CreateUserAsync();
+    var stokvelId = await factory.CreateStokvelAsync(
+        (treasurer, StokvelMemberRole.Treasurer), (me, StokvelMemberRole.Member));
+    await factory.CreateCycleAsync(stokvelId);
+
+    var response = await factory.CreateClientFor(me).GetAsync("/api/v1/me/home");
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    var json = await response.Content.ReadAsStringAsync();
+    Assert.Contains("\"status\":\"Open\"", json);
+    Assert.Matches("\"endsOn\":(null|\"\\d{4}-\\d{2}-\\d{2}\")", json);
+}
+
     // ---------- one error contract ----------
 
     [Fact]
