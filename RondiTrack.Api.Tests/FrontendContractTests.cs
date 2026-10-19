@@ -368,4 +368,28 @@ public async Task Home_includes_the_cycles_status_and_end_date()
         var oldPath = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         Assert.NotEqual(HttpStatusCode.OK, (await client.SendAsync(oldPath)).StatusCode);   // the unversioned path is gone
     }
+
+    [Fact]
+ public async Task Contributions_carry_amountCents_as_an_integer_and_a_cycleLabel()
+ {
+    var treasurer = await factory.CreateUserAsync();
+    var me = await factory.CreateUserAsync();
+    var stokvelId = await factory.CreateStokvelAsync(
+        (treasurer, StokvelMemberRole.Treasurer), (me, StokvelMemberRole.Member));
+    var cycleId = await factory.CreateCycleAsync(stokvelId);
+
+    var createClient = factory.CreateClientFor(treasurer);
+    var created = await Record(createClient, stokvelId, cycleId, me.Id, 10.50m, Guid.NewGuid().ToString());
+    Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+    var response = await factory.CreateClientFor(treasurer)
+        .GetAsync($"/api/v1/stokvels/{stokvelId}/contributions");
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var json = await response.Content.ReadAsStringAsync();
+    Assert.Contains("\"amountCents\":1050", json);                              // integer cents, exact
+    Assert.Matches("\"amountCents\":\\d+", json);                              // never a decimal point
+    Assert.DoesNotContain("\"amountCents\":1050.", json);                      // belt and braces
+    Assert.Contains("\"cycleLabel\":", json);                                  // the field exists
+  }
 }
