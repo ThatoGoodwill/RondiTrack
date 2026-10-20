@@ -89,19 +89,27 @@ public class StokvelContributionsController(
                 : query.OrderBy(c => c.Amount).ThenBy(c => c.Id);
         }
 
-        var rows = await query
-            .Select(c => new ContributionResponse(c.Id, c.StokvelId, c.UserId, c.ContributionCycleId, c.Amount, c.RecordedAt))
-            .Take(effectivePageSize + 1)
-            .ToListAsync(ct);
-
+       var rows = await (
+    from c in query
+    join cy in context.ContributionCycles.AsNoTracking() on c.ContributionCycleId equals cy.Id
+    select new ContributionResponse(
+        c.Id,
+        c.StokvelId,
+        c.UserId,
+        c.ContributionCycleId,
+        ContributionResponse.ToCents(c.Amount),
+        c.RecordedAt,
+        cy.Label))
+           .Take(effectivePageSize + 1)
+         .ToListAsync(ct);
         string? nextToken = null;
         if (rows.Count > effectivePageSize)
         {
             rows.RemoveAt(rows.Count - 1);
             var last = rows[^1];
-            var lastSortValue = field == ContributionSortField.RecordedAt
-                ? last.RecordedAt.ToString("O", CultureInfo.InvariantCulture)
-                : last.Amount.ToString(CultureInfo.InvariantCulture);
+          var lastSortValue = field == ContributionSortField.RecordedAt
+    ? last.RecordedAt.ToString("O", CultureInfo.InvariantCulture)
+    : (last.AmountCents / 100m).ToString(CultureInfo.InvariantCulture);
             nextToken = PageToken.Encode(new PageTokenData(lastSortValue, last.Id, fingerprint));
         }
 
@@ -114,10 +122,16 @@ public class StokvelContributionsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ContributionResponse>> GetById(Guid stokvelId, Guid id, CancellationToken ct)
     {
-        var contribution = await context.Contributions.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == id && c.StokvelId == stokvelId, ct)
-            ?? throw new NotFoundException("contribution.not_found", $"No contribution with id {id} exists for this stokvel.");
-        return Ok(ContributionResponse.FromEntity(contribution));
+       var contribution = await context.Contributions.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == id && c.StokvelId == stokvelId, ct)
+               ?? throw new NotFoundException("contribution.not_found", $"No contribution with id {id} exists for this stokvel.");
+
+        var cycleLabel = await context.ContributionCycles.AsNoTracking()
+            .Where(cy => cy.Id == contribution.ContributionCycleId)
+            .Select(cy => cy.Label)
+            .FirstOrDefaultAsync(ct) ?? "";
+
+        return Ok(ContributionResponse.FromEntity(contribution, cycleLabel));
     }
 
     [HttpPost]

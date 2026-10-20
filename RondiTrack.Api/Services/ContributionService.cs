@@ -85,7 +85,7 @@ public sealed class ContributionService(
 
         // ---- D. write, then remember the key so a retry finds it ----
         await contributions.AddAsync(created.Value, ct);
-        var response = ContributionResponse.FromEntity(created.Value);
+        var response = ContributionResponse.FromEntity(created.Value, cycle.Label);
 
         await idempotency.SaveAsync(
             new IdempotencyRecord(idempotencyKey, requestHash, JsonSerializer.Serialize(response), DateTimeOffset.UtcNow),

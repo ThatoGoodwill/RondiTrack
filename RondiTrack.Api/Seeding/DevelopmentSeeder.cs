@@ -26,7 +26,9 @@ public static class DevelopmentSeeder
         var users = services.GetRequiredService<IUserRepository>();
         var stokvels = services.GetRequiredService<IStokvelRepository>();
         var cycles = services.GetRequiredService<IContributionCycleRepository>();
+        var contributions = services.GetRequiredService<IContributionRepository>();
         var hasher = services.GetRequiredService<IPasswordHasher<User>>();
+        
 
         User NewUser(string first, string last, string email, DateOnly dob)
         {
@@ -64,11 +66,29 @@ public static class DevelopmentSeeder
         foreach (var s in new[] { ubuntu, grocery, friday })
             await stokvels.AddAsync(s);
 
-        await cycles.AddAsync(Ok(ContributionCycle.Create(ubuntu.Id, "2026-09", 500.00m)));
-        await cycles.AddAsync(Ok(ContributionCycle.Create(grocery.Id, "2026-09", 350.50m)));
-        await cycles.AddAsync(Ok(ContributionCycle.Create(friday.Id, "2026-W39", 100.00m)));
+                var ubuntuCycle  = Ok(ContributionCycle.Create(ubuntu.Id,  "2026-09", 500.00m));
+        var groceryCycle = Ok(ContributionCycle.Create(grocery.Id, "2026-09", 350.50m));
+        var fridayCycle  = Ok(ContributionCycle.Create(friday.Id,  "2026-W39", 100.00m));
 
-        logger.LogInformation("Demo data created (7 users, 3 stokvels).");
+        // Friday Rotation's only cycle is PaidOut, so Lerato's Friday card will show "No open cycle".
+        fridayCycle.MarkPaidOut();
+
+        await cycles.AddAsync(ubuntuCycle);
+        await cycles.AddAsync(groceryCycle);
+        await cycles.AddAsync(fridayCycle);
+
+        // Captured sample data for Assignment 7.1, one contribution per (stokvel, user, cycle)
+        // so the duplicate-payment guard is satisfied.
+        //   Ubuntu (Lerato = Member):    10 cents paid, still owes R499.90 → "Still owed" on the card
+        //   Grocery (Lerato = Treasurer): full R350.50 paid → "All paid up for this cycle"
+        //   Two other members' contributions exercise ContributionCard on real rows.
+        await contributions.AddAsync(Ok(Contribution.Create(ubuntu.Id,  lerato.Id, ubuntuCycle.Id,  0.10m)));
+        await contributions.AddAsync(Ok(Contribution.Create(grocery.Id, lerato.Id, groceryCycle.Id, 350.50m)));
+        await contributions.AddAsync(Ok(Contribution.Create(ubuntu.Id,  thandi.Id, ubuntuCycle.Id,  500.00m)));
+        await contributions.AddAsync(Ok(Contribution.Create(grocery.Id, pieter.Id, groceryCycle.Id, 100.00m)));
+
+        logger.LogInformation("Demo data created (7 users, 3 stokvels, 4 contributions).");
+       
     }
 
     private static void Join(Stokvel stokvel, User user, StokvelMemberRole role)
