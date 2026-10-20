@@ -1595,3 +1595,48 @@ With the API running: `cd clients/typescript && npm ci && npm run contract`. For
 - The scheduler is a plain `BackgroundService`. I would move to Quartz or Hangfire for cron expressions, a job-history UI or distributed locking across many nodes.
 - Seeded cycles have no end date, so the job never closes them; only cycles created with an end date are closed.
 
+---
+
+## Frontend (Assignment 7.1)
+
+The React app lives in `web/` and renders hard-coded data captured from the running API. No fetching yet: Day 3 swaps the hard-coded data for live calls, and the cards are already shaped so they won't need to change when it does.
+
+### 1. Memo note
+
+`StokvelCard` derives "all paid up for this cycle" from `cycle.owedCents` during render (via `cycle.owedCents > 0 ? … : …`) — there is no `useState`, no `useMemo`, and no derived state stored anywhere. The React Compiler memoises the derived value automatically. Evidence: the Vite build emits `memo_cache_sentinel` into the bundle (`grep -l memo_cache_sentinel dist/assets/*.js` finds it), and React DevTools shows the Memo badge on the component. No `useMemo` or `useCallback` is in the source, and none was needed.
+
+### 2. How the role reaches the card
+
+Each entry in the `/api/v1/me/home` response carries the caller's role **in that stokvel** (`role: "Member"` or `role: "Treasurer"`). `App` passes the entry straight to `<StokvelCard entry={entry} />`, and the card reads `entry.role` — no context, no token, no global "current user" state, and no `isTreasurer` prop computed somewhere else. The two cards differ from their props alone.
+
+Hiding the Treasurer section is a convenience for the user, not security. The API still returns 403 for a Member who calls a treasurer-only endpoint (the check is against the database, per the Stokvel authorization chapter). The card simply doesn't render what the member isn't allowed to use.
+
+### 3. Strings
+
+The generated `role` type is a plain `string` (the API emits `"Member" | "Treasurer" | "Admin"` as a string, not as an OpenAPI enum, so `openapi-typescript` can't turn it into a union). A typo like `role === 'Tresurer'` would compile and silently hide the Treasurer section.
+
+To keep that risk contained, the two things the card does with the role — `roleText` and `isTreasurer` — live in one file, `src/lib/labels.ts`, and both are covered by `src/lib/labels.test.ts`. If the role comparison is ever wrong, a test fails, not just a screenshot.
+
+### 4. Handoff gaps fixed (with tests)
+
+Every gap found while reading the API's own contract was fixed **in the API**, with a test, and then the types were regenerated. Nothing was worked around in React.
+
+- **`HomeCycleResponse.status` and `HomeCycleResponse.endsOn`** — the `/api/v1/me/home` cycle did not carry the cycle's status (`Open | PaidOut | Closed`) or its last day, so the card couldn't show "Cycle X: Open (due …)". Both fields were added to `HomeCycleResponse` and filled from the loaded `ContributionCycle` in `HomeService`. `status` is serialized as a string via `[property: JsonConverter(typeof(JsonStringEnumConverter))]` so the wire value is `"Open"`, not `1`. Covered by `Home_includes_the_cycles_status_and_end_date`.
+- **`ContributionResponse.amountCents`** — a contribution's money was serialized as a `decimal` of rands (`"type": "double"` in the OpenAPI document), which would have forced the browser to divide by 100 or use `toFixed`. Changed to `long AmountCents` computed with exact integer rounding `(long)decimal.Round(amount * 100, 0, MidpointRounding.AwayFromZero)` at the API boundary. Covered by `Contributions_carry_amountCents_as_an_integer_and_a_cycleLabel`.
+- **`ContributionResponse.cycleLabel`** — the contribution carried only a `ContributionCycleId` (a UUID), so the card couldn't show which cycle it belonged to. The list query and the single-contribution endpoint now join `ContributionCycles` and project `Label`. Covered by the same test.
+
+Two gaps were **not** closed, and are recorded here rather than worked around in React:
+
+- **Contribution status (`Pending / Paid / Confirmed`)** — the domain has no status field on a `Contribution`, and there is no honest way to derive it from `RecordedAt` (every row would be "Paid" by that rule). The `ContributionCard` shows the amount, the payment timestamp, and the cycle label; it does **not** show a status. Adding a `ContributionStatus` enum to `Contribution` (entity + migration + seeder + tests) is a Week-8 domain change.
+- **No-open-cycle case in the sample data** — the seeder's demo user (Lerato) is not a member of the stokvel whose only cycle is `PaidOut`, so her captured sample has no `currentCycle: null` row. The `StokvelCard` handles the null case ("No open cycle", and no paid/owed figures) and the code path is covered by the `HomeResponse.currentCycle` type being nullable; adding Lerato to that third stokvel is a one-line seeder change, deliberately not done so the two contrasting cards (Member who owes / Treasurer who is paid up) stay the focus of the sample.
+- **`endsOn` is `null` for a freshly created Open cycle.** The close-cycle job is what assigns `EndsOn`; a cycle created by the seeder and the test factory doesn't have one yet. The card renders "No due date" in that case, and the tests accept either `null` or a real `"YYYY-MM-DD"` so this stays documented rather than pretended away.
+
+### 5. How to run the frontend
+
+The API must be running on `http://localhost:8080` before generating types.
+
+```bash
+cd web
+npm install
+npm run generate:api     # writes src/api/schema.d.ts from the running API's OpenAPI document
+npm run dev              # http://localhost:3000
