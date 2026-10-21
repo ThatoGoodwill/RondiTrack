@@ -13,6 +13,10 @@ type Home = components['schemas']['HomeResponse']
 type StokvelList = components['schemas']['StokvelResponse'][]
 type CycleList = components['schemas']['ContributionCycleResponse'][]
 
+export type StokvelResponse = components['schemas']['StokvelResponse']
+export type CycleItem = components['schemas']['ContributionCycleResponse']
+export type ContributionItem = components['schemas']['ContributionResponse']
+
 export const queryKeys = {
   me: ['me'] as const,
   home: ['me', 'home'] as const,

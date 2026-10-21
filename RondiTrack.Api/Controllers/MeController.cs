@@ -24,7 +24,7 @@ public class MeController(IHomeService home, IUserRepository users) : ApiControl
         var user = await users.GetByIdAsync(userId, ct);
         if (user is null) return NotFound();
 
-        return Ok(new MeResponse(user.Id, user.FirstName, user.LastName, user.Email));
+        return Ok(new MeResponse(user.Id, user.FirstName, user.LastName, user.Email, user.DateOfBirth));
     }
 
     [HttpGet("home")]

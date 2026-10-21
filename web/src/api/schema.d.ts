@@ -469,6 +469,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the current authenticated user
+         * @description Returns the basic profile (id, name, email) of the signed-in member.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MeResponse"];
+                        "application/json": components["schemas"]["MeResponse"];
+                        "text/json": components["schemas"]["MeResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/home": {
         parameters: {
             query?: never;
@@ -1722,6 +1763,15 @@ export interface components {
             role: string;
             /** Format: date-time */
             joinedAtUtc: string;
+        };
+        MeResponse: {
+            /** Format: uuid */
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string;
+            /** Format: date */
+            dateOfBirth: string;
         };
         PageResponseOfContributionResponse: {
             items: components["schemas"]["ContributionResponse"][];
