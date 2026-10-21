@@ -1640,3 +1640,72 @@ cd web
 npm install
 npm run generate:api     # writes src/api/schema.d.ts from the running API's OpenAPI document
 npm run dev              # http://localhost:3000
+
+
+## # RondiTrack Web — Assignment 7.2
+
+A styled, responsive stokvel view built with React, Tailwind v4, and shadcn/ui. The view is designed for a treasurer on a 360px phone right after a meeting, with clear status badges, SAST date countdowns, and a dark mode.
+
+## 1. StrictMode Evidence
+
+In `useSaNow.ts`, the effect schedules a timer for the next Johannesburg midnight. Because the hook is rendered inside `<StrictMode>`, React runs the effect twice in development.
+
+**With the cleanup (`return () => window.clearTimeout(id)`) in place:**
+```text
+timer scheduled
+timer cleared
+timer scheduled
+The first mount schedules a timer and immediately clears it on unmount. The second mount schedules the final, active timer. Only one timer survives.
+
+Without the cleanup (commented out):
+
+text
+timer scheduled
+timer scheduled
+Two timers are left running. The first one is never cleared. With a setInterval (or a fast timer), this would cause double-ticking and memory leaks. The cleanup is essential to keep exactly one midnight timer alive.
+
+2. Open/Closed State
+The open/closed state lives in ContributionList (openIds). It cannot stay inside each group because the "Expand all / Collapse all" button needs to read and set the state of every group at once. It is keyed by cycle.id (never by array position) so that when a new cycle opens in the future and pushes older cycles down, the correct cycle stays expanded.
+
+3. Effect Dependency Array
+The dependency array is [now], not []. The effect reads now to compute the milliseconds until the next Johannesburg midnight. After the timeout fires, setNow(new Date()) changes now, which triggers the effect again and schedules the next midnight. The demo's [] would schedule only one timer and the countdown would freeze after the first day.
+
+4. Due-Date Decision
+The API sends endsOn as a South African calendar date ("2026-10-31"). If we used new Date("2026-10-31"), JavaScript would parse it as UTC midnight (02:00 SAST), which is 22 hours early. deadlineFromDueDate in deadline.ts parses the calendar date and explicitly sets the time to 22:00:00Z (end of day in Johannesburg). Any date string that includes a time/Z is treated as an instant.
+
+5. StatusBadge Design
+StatusBadge takes a kind ('cycle' | 'contribution' | 'arrears') as well as the status string. This is required because "Paid" (a contribution) and "Paid out" (a cycle) are different concepts. A single status-string lookup table would conflate them and show the wrong colour. By separating the kinds, the cycle badge can show a purple banknote icon for "Paid out", while a contribution badge shows a green check for "Paid". Arrears are personal and pass kind="arrears" with a cents value.
+
+6. Contrast Table
+Measured with Chrome DevTools' colour picker. All text meets WCAG 2.2 SC 1.4.3 (minimum 4.5:1).
+
+Badge	Light Ratio	Dark Ratio
+Cycle: Open (blue-950 on blue-100)	12.9:1	13.3:1
+Cycle: Closed (slate-900 on slate-100)	16.8:1	15.2:1
+Cycle: Paid out (purple-950 on purple-100)	12.3:1	13.5:1
+Contribution: Pending (amber-950 on amber-100)	12.6:1	12.6:1
+Contribution: Paid (green-950 on green-100)	11.5:1	11.8:1
+Contribution: Confirmed (emerald-950 on emerald-200)	14.1:1	13.9:1
+Arrears (red-950 on red-100)	13.2:1	12.9:1
+In DevTools' Rendering panel, Achromatopsia confirms statuses still distinguish by icon and text (not colour alone).
+
+7. Audit
+Running npm audit reported 0 vulnerabilities directly, but includes dev dependencies. npm audit --omit=dev reports 0 vulnerabilities. All build tooling (Vite, TypeScript, ESLint, shadcn) is in devDependencies. The shipped JS bundle has no known vulnerabilities.
+
+8. Screenshots (360px)
+Light mode: docs/home-light-360.png
+
+Dark mode: docs/home-dark-360.png
+
+9. Handoff Gaps Fixed in the API
+Gap	Fix	Test
+GET /cycles missing status, endsOn, totals	Updated ContributionCycleResponse and ContributionCyclesController to query totals via EF Core.	Verified via Scalar / curl.
+/me/home currentCycle missing endsOn	Updated DevelopmentSeeder to pass endsOn to ContributionCycle.Create.	Verified via /me/home JSON.
+/me/home missing arrearsCents	Added ArrearsCents to HomeStokvelResponse, queried from db.ArrearsRecords in HomeService.	Verified via /me/home JSON for Lerato (49990) and Umoja (0).
+Seeder lacked 3 cycles / arrears	Seeder now creates Open, Closed, PaidOut cycles per stokvel and an ArrearsRecord for Lerato.	Verified via /me/home and /cycles JSON.
+Additional Notes
+Which clock wins? The API's clock (via TimeProvider and CycleCloseJob) decides arrears and Closed status. The DueCountdown only renders when status === 'Open'. If the API says Closed, the countdown hides and the badge shows Closed, even if the user's local clock says "Due today".
+
+Theme is device-wide: The localStorage key is theme. This is safe because it isn't personal data. Assignment 8.4's pinned stokvels will be personal, so they will need to be scoped to the signed-in user and cleared on logout.
+
+Treasurer section security: Hiding the "Treasurer tools" in React is only for UX. The API still enforces security. A Member calling a treasurer-only endpoint gets 403.
