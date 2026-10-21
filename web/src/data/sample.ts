@@ -16,8 +16,9 @@ export const home: MeHomeEntry[] = [
       paidCents: 10,
       owedCents: 49990,
       status: 'Open',
-      endsOn: null,
+      endsOn: '2026-10-31',
     },
+    arrearsCents: 49990,
     nextPayoutDueUtc: '2026-11-20T00:24:42.898021Z',
   },
   {
@@ -30,8 +31,9 @@ export const home: MeHomeEntry[] = [
       paidCents: 35050,
       owedCents: 0,
       status: 'Open',
-      endsOn: null,
+      endsOn: '2026-10-31',
     },
+    arrearsCents: 0,
     nextPayoutDueUtc: '2026-11-20T00:24:42.898233Z',
   },
 ]

@@ -1649,6 +1649,13 @@ export interface components {
             label: string;
             /** Format: double */
             targetAmount: number;
+            status: string;
+            /** Format: date */
+            endsOn: null | string;
+            /** Format: int64 */
+            collectedCents: number;
+            /** Format: int64 */
+            dueCents: number;
         };
         /** @enum {unknown} */
         ContributionCycleStatus: "Open" | "PaidOut" | "Closed";
@@ -1698,6 +1705,8 @@ export interface components {
             name: string;
             role: string;
             currentCycle: null | components["schemas"]["HomeCycleResponse"];
+            /** Format: int64 */
+            arrearsCents: number;
             /** Format: date-time */
             nextPayoutDueUtc: null | string;
         };
