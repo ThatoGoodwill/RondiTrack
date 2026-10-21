@@ -11,6 +11,7 @@ public sealed record HomeStokvelResponse(
     string Name,
     string Role,                    // "Member" | "Treasurer" | "Admin": a name, never a number
     HomeCycleResponse? CurrentCycle,// null when the stokvel has no open cycle
+    long ArrearsCents,
     DateTime? NextPayoutDueUtc);    // UTC; null when there is no open cycle
 
 public sealed record HomeCycleResponse(
@@ -21,3 +22,4 @@ public sealed record HomeCycleResponse(
     [property: JsonConverter(typeof(JsonStringEnumConverter))]
     ContributionCycleStatus Status, // Open | PaidOut | Closed, serialized as a string
     DateOnly? EndsOn);              // last day of the cycle, SA calendar date; null if never closed by the job
+    

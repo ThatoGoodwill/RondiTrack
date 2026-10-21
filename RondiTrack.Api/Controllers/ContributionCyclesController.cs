@@ -5,6 +5,8 @@ using RondiTrack.Domain.Repositories;
 using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 using RondiTrack.Api.Authorization;
+using RondiTrack.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace RondiTrack.Api.Controllers;
 
@@ -13,7 +15,9 @@ namespace RondiTrack.Api.Controllers;
 [ApiController]
 [Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/cycles")]
 public class ContributionCyclesController(
-    IStokvelRepository stokvels, IContributionCycleRepository cycles) : ApiControllerBase
+    IStokvelRepository stokvels,
+    IContributionCycleRepository cycles,
+    RondiTrackDbContext db) : ApiControllerBase
 {
     [HttpGet]
     [EndpointSummary("List a stokvel's contribution cycles")]
@@ -24,7 +28,17 @@ public class ContributionCyclesController(
     {
         await EnsureStokvelExists(stokvelId, ct);
         var list = await cycles.GetByStokvelAsync(stokvelId, ct);
-        return Ok(list.Select(ContributionCycleResponse.FromEntity).ToList());
+
+        var ids = list.Select(c => c.Id).ToList();
+        var totals = await db.Contributions
+            .Where(c => ids.Contains(c.ContributionCycleId))
+            .GroupBy(c => c.ContributionCycleId)
+            .Select(g => new { CycleId = g.Key, Cents = (long)(g.Sum(x => x.Amount) * 100m) })
+            .ToListAsync(ct);
+
+        var byCycle = totals.ToDictionary(t => t.CycleId, t => t.Cents);
+        return Ok(list.Select(c =>
+            ContributionCycleResponse.FromEntity(c, byCycle.GetValueOrDefault(c.Id, 0L))).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -35,7 +49,12 @@ public class ContributionCyclesController(
     public async Task<ActionResult<ContributionCycleResponse>> GetById(Guid stokvelId, Guid id, CancellationToken ct)
     {
         var cycle = await GetCycleOrThrow(stokvelId, id, ct);
-        return Ok(ContributionCycleResponse.FromEntity(cycle));
+
+        var cents = (long)(await db.Contributions
+            .Where(c => c.ContributionCycleId == cycle.Id)
+            .SumAsync(c => (decimal?)c.Amount, ct) ?? 0m) * 100L;
+
+        return Ok(ContributionCycleResponse.FromEntity(cycle, cents));
     }
 
     [HttpPost]
@@ -53,7 +72,7 @@ public class ContributionCyclesController(
         var cycle = ContributionCycle.Create(stokvelId, request.Label, request.TargetAmount).ThrowIfFailure();
         await cycles.AddAsync(cycle, ct);
 
-        var response = ContributionCycleResponse.FromEntity(cycle);
+        var response = ContributionCycleResponse.FromEntity(cycle, collectedCents: 0L);
         return CreatedAtAction(nameof(GetById), new { stokvelId, id = response.Id }, response);
     }
 
@@ -70,7 +89,12 @@ public class ContributionCyclesController(
         var cycle = await GetCycleOrThrow(stokvelId, id, ct);
         cycle.Update(request.Label, request.TargetAmount).ThrowIfFailure();
         await cycles.SaveChangesAsync(ct);
-        return Ok(ContributionCycleResponse.FromEntity(cycle));
+
+        var cents = (long)(await db.Contributions
+            .Where(c => c.ContributionCycleId == cycle.Id)
+            .SumAsync(c => (decimal?)c.Amount, ct) ?? 0m) * 100L;
+
+        return Ok(ContributionCycleResponse.FromEntity(cycle, cents));
     }
 
     [HttpDelete("{id:guid}")]

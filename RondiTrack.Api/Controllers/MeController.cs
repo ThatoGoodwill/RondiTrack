@@ -4,13 +4,29 @@ using RondiTrack.Api.Auth;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Services;
 using RondiTrack.Domain.Exceptions;
+using RondiTrack.Domain.Repositories;
 
 namespace RondiTrack.Api.Controllers;
 
 [ApiController]
 [Route(ApiRoutes.Base + "/me")]
-public class MeController(IHomeService home) : ApiControllerBase
+public class MeController(IHomeService home, IUserRepository users) : ApiControllerBase
 {
+    [HttpGet]
+    [EndpointSummary("Get the current authenticated user")]
+    [EndpointDescription("Returns the basic profile (id, name, email) of the signed-in member.")]
+    [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<MeResponse>> GetMe(CancellationToken ct)
+    {
+        var userId = User.GetUserId()
+            ?? throw new AuthenticationFailedException("auth.unauthenticated", "Authentication is required to access this resource.");
+            
+        var user = await users.GetByIdAsync(userId, ct);
+        if (user is null) return NotFound();
+
+        return Ok(new MeResponse(user.Id, user.FirstName, user.LastName, user.Email));
+    }
+
     [HttpGet("home")]
     [EndpointSummary("The signed-in member's home screen")]
     [EndpointDescription("One response covering every stokvel the caller belongs to: their role, the current cycle, " +

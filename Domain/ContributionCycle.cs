@@ -36,6 +36,7 @@ public sealed class ContributionCycle
 
     public ContributionCycleStatus Status { get; private set; } = ContributionCycleStatus.Open;
     public void MarkPaidOut() => Status = ContributionCycleStatus.PaidOut;
+    public void MarkClosed() => Status = ContributionCycleStatus.Closed;
 
     // createdAt: the cycle-close job passes the injected clock's "now". Everyone else leaves it null (real time).
     public static Result<ContributionCycle> Create(Guid stokvelId, string? label, decimal targetAmount,

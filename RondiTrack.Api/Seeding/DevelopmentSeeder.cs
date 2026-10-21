@@ -29,7 +29,6 @@ public static class DevelopmentSeeder
         var contributions = services.GetRequiredService<IContributionRepository>();
         var hasher = services.GetRequiredService<IPasswordHasher<User>>();
         
-
         User NewUser(string first, string last, string email, DateOnly dob)
         {
             var user = Ok(User.Create(first, last, email, dob));
@@ -66,29 +65,45 @@ public static class DevelopmentSeeder
         foreach (var s in new[] { ubuntu, grocery, friday })
             await stokvels.AddAsync(s);
 
-                var ubuntuCycle  = Ok(ContributionCycle.Create(ubuntu.Id,  "2026-09", 500.00m));
-        var groceryCycle = Ok(ContributionCycle.Create(grocery.Id, "2026-09", 350.50m));
-        var fridayCycle  = Ok(ContributionCycle.Create(friday.Id,  "2026-W39", 100.00m));
+        // --- 7.2 Changes: Multiple cycles (Open, Closed, PaidOut) per stokvel ---
+        // Dates are set so the frontend can calculate the countdown. Open ends in the future, Closed/PaidOut in the past.
+        
+        var ubuntuCycleClosed  = Ok(ContributionCycle.Create(ubuntu.Id,  "2026-07", 500.00m, endsOn: new DateOnly(2026, 7, 31)));
+        var ubuntuCyclePaidOut = Ok(ContributionCycle.Create(ubuntu.Id,  "2026-08", 500.00m, endsOn: new DateOnly(2026, 8, 31)));
+        var ubuntuCycle        = Ok(ContributionCycle.Create(ubuntu.Id,  "2026-09", 500.00m, endsOn: new DateOnly(2026, 10, 31)));
+        ubuntuCycleClosed.MarkClosed();
+        ubuntuCyclePaidOut.MarkPaidOut();
 
-        // Friday Rotation's only cycle is PaidOut, so Lerato's Friday card will show "No open cycle".
+        var groceryCycleClosed  = Ok(ContributionCycle.Create(grocery.Id, "2026-07", 350.50m, endsOn: new DateOnly(2026, 7, 31)));
+        var groceryCyclePaidOut = Ok(ContributionCycle.Create(grocery.Id, "2026-08", 350.50m, endsOn: new DateOnly(2026, 8, 31)));
+        var groceryCycle        = Ok(ContributionCycle.Create(grocery.Id, "2026-09", 350.50m, endsOn: new DateOnly(2026, 10, 31)));
+        groceryCycleClosed.MarkClosed();
+        groceryCyclePaidOut.MarkPaidOut();
+
+        var fridayCycle = Ok(ContributionCycle.Create(friday.Id, "2026-W39", 100.00m, endsOn: new DateOnly(2026, 9, 27)));
         fridayCycle.MarkPaidOut();
 
+        await cycles.AddAsync(ubuntuCycleClosed);
+        await cycles.AddAsync(ubuntuCyclePaidOut);
         await cycles.AddAsync(ubuntuCycle);
+        await cycles.AddAsync(groceryCycleClosed);
+        await cycles.AddAsync(groceryCyclePaidOut);
         await cycles.AddAsync(groceryCycle);
         await cycles.AddAsync(fridayCycle);
 
-        // Captured sample data for Assignment 7.1, one contribution per (stokvel, user, cycle)
-        // so the duplicate-payment guard is satisfied.
-        //   Ubuntu (Lerato = Member):    10 cents paid, still owes R499.90 → "Still owed" on the card
-        //   Grocery (Lerato = Treasurer): full R350.50 paid → "All paid up for this cycle"
-        //   Two other members' contributions exercise ContributionCard on real rows.
+        // Captured sample data for 7.1 and 7.2.
         await contributions.AddAsync(Ok(Contribution.Create(ubuntu.Id,  lerato.Id, ubuntuCycle.Id,  0.10m)));
         await contributions.AddAsync(Ok(Contribution.Create(grocery.Id, lerato.Id, groceryCycle.Id, 350.50m)));
         await contributions.AddAsync(Ok(Contribution.Create(ubuntu.Id,  thandi.Id, ubuntuCycle.Id,  500.00m)));
         await contributions.AddAsync(Ok(Contribution.Create(grocery.Id, pieter.Id, groceryCycle.Id, 100.00m)));
 
-        logger.LogInformation("Demo data created (7 users, 3 stokvels, 4 contributions).");
-       
+        // 7.2: Seed an arrears record so /me/home returns ArrearsCents > 0 for Lerato in Ubuntu Savers.
+        // Shortfall: target 500.00, she paid 0.10 → 499.90 owed. That is 49_990 cents.
+        db.ArrearsRecords.Add(ArrearsRecord.Create(ubuntu.Id, ubuntuCycleClosed.Id, lerato.Id, 49_990L, DateTimeOffset.UtcNow));
+        
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Demo data created (7 users, 3 stokvels, multiple cycles, 4 contributions, arrears record).");
     }
 
     private static void Join(Stokvel stokvel, User user, StokvelMemberRole role)

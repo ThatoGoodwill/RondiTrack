@@ -45,19 +45,28 @@ public sealed class HomeService(RondiTrackDbContext db, TimeProvider clock) : IH
             .Select(g => new { CycleId = g.Key, Total = g.Sum(c => c.Amount) })
             .ToDictionaryAsync(x => x.CycleId, x => x.Total, ct);
 
-       var stokvels = memberships.Select(m =>
-       {
-         if (!currentByStokvel.TryGetValue(m.Id, out var cycle))
-             return new HomeStokvelResponse(m.Id, m.Name, m.Role.ToString(), null, null);
+        // 4. the CALLER's arrears (only their own rows)
+        var arrearsByStokvel = await db.ArrearsRecords.AsNoTracking()
+            .Where(a => a.UserId == userId && stokvelIds.Contains(a.StokvelId))
+            .GroupBy(a => a.StokvelId)
+            .Select(g => new { StokvelId = g.Key, Total = g.Sum(a => a.ShortfallCents) })
+            .ToDictionaryAsync(x => x.StokvelId, x => x.Total, ct);
 
-        var paid = paidByCycle.GetValueOrDefault(cycle.Id);
-        var owed = Math.Max(0m, cycle.TargetAmount - paid);
+        var stokvels = memberships.Select(m =>
+        {
+            var arrearsCents = arrearsByStokvel.GetValueOrDefault(m.Id);
+
+            if (!currentByStokvel.TryGetValue(m.Id, out var cycle))
+                return new HomeStokvelResponse(m.Id, m.Name, m.Role.ToString(), null, arrearsCents, null);
+
+            var paid = paidByCycle.GetValueOrDefault(cycle.Id);
+            var owed = Math.Max(0m, cycle.TargetAmount - paid);
 
             return new HomeStokvelResponse(
                 m.Id, m.Name, m.Role.ToString(),
-                new HomeCycleResponse(cycle.Id, cycle.Label, ToCents(paid), ToCents(owed), cycle.Status,
-                cycle.EndsOn),
-                          NextPayoutDue(cycle.CreatedAt, m.Frequency, now));
+                new HomeCycleResponse(cycle.Id, cycle.Label, ToCents(paid), ToCents(owed), cycle.Status, cycle.EndsOn),
+                arrearsCents, // <-- ADDED HERE
+                NextPayoutDue(cycle.CreatedAt, m.Frequency, now));
         }).ToList();
 
         return new HomeResponse(stokvels);
