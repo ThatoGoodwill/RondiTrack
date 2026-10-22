@@ -1709,3 +1709,98 @@ Which clock wins? The API's clock (via TimeProvider and CycleCloseJob) decides a
 Theme is device-wide: The localStorage key is theme. This is safe because it isn't personal data. Assignment 8.4's pinned stokvels will be personal, so they will need to be scoped to the signed-in user and cleared on logout.
 
 Treasurer section security: Hiding the "Treasurer tools" in React is only for UX. The API still enforces security. A Member calling a treasurer-only endpoint gets 403.
+
+## # RondiTrack Frontend (Assignment 7.3)
+
+This document details the implementation of live API data fetching, session management, and error handling for RondiTrack.
+
+## 1. API Contract Notes
+
+Before building the frontend, I verified the following API contracts. Where the API was missing a required feature, I fixed the backend first.
+
+1. **CORS with Credentials:** ✅ Verified. The API returns `Access-Control-Allow-Credentials: true` and correctly exposes `Retry-After` in the preflight response for `http://localhost:3000` and the Codespace development URL.
+2. **Refresh Cookie:** ✅ Verified. The `Set-Cookie` header includes `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/api/v1/auth`. 
+3. **User Identity:** ❌ **API Fix Required.** The `/api/v1/me` endpoint was missing (returning 404). I added `MeController.GetMe` to return the current user's basic profile, and added `GET /api/v1/me` to the OpenAPI spec.
+4. **Pagination:** ✅ Verified. `GET /api/v1/stokvels/{id}/contributions` returns `"nextPageToken": null` (not an empty string) when there are no more pages, so `getNextPageParam` correctly stops fetching.
+5. **Concurrent Refreshes:** ✅ Verified. Sending two simultaneous `POST /api/v1/auth/refresh` requests with the same cookie results in the first succeeding and the second failing with `401 Unauthorized` (token reuse detection). This is exactly why the frontend **must** use single-flight refreshing to avoid revoking the session.
+
+## 2. Single-Flight Proof
+
+The session module (`src/auth/session.ts`) ensures that concurrent 401s trigger exactly one refresh request. To prove this, I wrote a Vitest test with a fake API that delays the refresh response.
+
+### Failing Output (with single-flight disabled)
+
+When I temporarily replaced the `inFlight` promise logic with a plain `return doRefresh()`, the test failed, proving the test actually catches the bug:
+
+```text
+FAIL  src/auth/session.test.ts > session — single-flight > five parallel 401s cause exactly one refresh
+AssertionError: expected 5 to be 1 // Object.is equality
+- Expected: 1
++ Received: 5
+Passing Output (with single-flight enabled)
+With the promise lock restored (if (inFlight) return inFlight), the test passes:
+
+text
+✓ src/auth/session.test.ts (5 tests) 120ms
+  ✓ five parallel 401s cause exactly one refresh
+  ✓ a later expiry starts a new refresh
+  ✓ a failed refresh signs out once
+  ✓ no token means no loop
+  ✓ a POST body survives the retry
+3. Stokvel Switch Proof
+To prevent a member from seeing the wrong stokvel's contributions, the query keys are scoped by stokvel id (queryKeys.contributions(id)). However, TanStack Query has a keepPreviousData feature that is often used to prevent flicker. Using it here would show the previous stokvel's data for a split second under the new heading.
+
+I wrote a component test (HomePage.test.tsx) with a fake API where Stokvel A responds instantly and Stokvel B has a 300ms delay.
+
+Failing Output (with keepPreviousData)
+When I added placeholderData: keepPreviousData to the contributions query, the test failed because Stokvel A's amount (R 11,11) was still on screen after switching to B:
+
+text
+FAIL  src/pages/HomePage.test.tsx > stokvel switch > does not show the previous stokvel’s contributions after the switch
+AssertionError: expected document not to contain element, found <p class="amount">R 11,11</p>
+Passing Output (without keepPreviousData)
+With the fix applied (showing the skeleton during the switch), the test passes:
+
+text
+✓ src/pages/HomePage.test.tsx (1 test) 617ms
+  ✓ does not show the previous stokvel’s contributions after the switch
+4. Shared Phone Check
+Under POPIA, a member's contribution history is personal information. On a shared phone, the next member must not see the previous member's data.
+
+Signed in as lerato.mokoena@example.com.
+
+Clicked Sign out.
+
+Signed in as thandi.nkosi@example.com.
+
+Opened TanStack DevTools immediately after login.
+
+Result: The cache was empty. No queries from Lerato's session remained. The useLogout mutation calls queryClient.clear() on settle, which wipes all cached data.
+
+Back button check: No URL state is stored yet (routing arrives later), so the sign-in form is the only state.
+
+https://docs/shared-phone-cache.png
+
+5. Known Gaps
+Theme Preference: The theme (light/dark/system) is saved in localStorage because it is a device-wide UI preference, not personal data. Assignment 8.4's pinned stokvels will be personal, so they will need to be stored differently and cleared on logout.
+
+Optimistic UI: Recording a contribution does not use TanStack Query's optimistic updates yet. It waits for the server to respond before invalidating the query.
+
+Getting Started
+bash
+cd web
+npm install
+npm run dev
+The app expects the API to be running on http://localhost:8080 (or the Codespace URL defined in .env.development).
+
+text
+
+### Final Steps for Submission
+
+1. **Save the screenshot**: Ensure the TanStack DevTools screenshot is saved exactly at `web/docs/shared-phone-cache.png`.
+2. **Commit the README**:
+   ```bash
+   cd /workspaces/RondiTrack
+   git add web/README.md web/docs/shared-phone-cache.png
+   git commit -m "Add Assignment 7.3 README and screenshots"
+   git push origin main
