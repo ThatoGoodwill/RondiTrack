@@ -83,7 +83,7 @@ describe('stokvel switch', () => {
     vi.stubGlobal('fetch', makeFakeApi())
     const user = userEvent.setup()
 
-    renderWithQuery(<HomePage />)
+    renderWithQuery(<HomePage onSignOut={() => {}} />)
 
     // Stokvel A's cycle is "Open", so its group starts expanded automatically.
     // The contribution amount should appear without needing to click anything.

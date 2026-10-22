@@ -3,7 +3,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  keepPreviousData, 
+ 
 } from '@tanstack/react-query'
 import { api, unwrap } from './client'
 import { ApiError, login, logout, onSignedOut } from '../auth/session'
@@ -34,9 +34,10 @@ export function useMe() {
     queryKey: queryKeys.me,
     queryFn: async () => unwrap<Me>(api.GET('/api/v1/me', { credentials: 'include' })),
     staleTime: 60_000,
+    retry: false,        // no retry, fail immediately
+    refetchOnWindowFocus: false,
   })
 }
-
 export function useHome() {
   return useQuery({
     queryKey: queryKeys.home,

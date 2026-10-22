@@ -1,6 +1,5 @@
 import type { StokvelResponse } from '../api/queries'
 
-
 type Props = {
   stokvels: StokvelResponse[]
   selectedId: string | null

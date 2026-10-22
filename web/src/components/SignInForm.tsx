@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { useLogin } from '../api/queries'
 import { ErrorView } from './ErrorView'
 
-export function SignInForm() {
+type Props = {
+  onSuccess: () => void
+}
+
+export function SignInForm({ onSuccess }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const login = useLogin()
@@ -13,7 +17,11 @@ export function SignInForm() {
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          login.mutate({ email, password })
+          login.mutate({ email, password }, {
+            onSuccess: () => {
+              onSuccess()
+            }
+          })
         }}
         className="space-y-3"
       >

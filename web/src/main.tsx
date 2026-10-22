@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ApiError } from './auth/session'
+import { wireSignOutToCache } from './api/queries'
 import App from './App'
 import './index.css'
 
@@ -10,8 +11,6 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        // Never retry a 4xx: 404, 403, 429, 400 will not fix themselves.
-        // Retrying a 429 makes the rate limit worse.
         if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
           return false
         }
@@ -20,6 +19,10 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// NEW: When the session module signals a signed-out state (refresh failed),
+// wipe every cached query so the next member on a shared phone sees nothing of the previous one.
+wireSignOutToCache(queryClient)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -36,9 +36,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ======================= 1. REGISTER SERVICES (dependency injection) =======================
 
-// Controllers + two GLOBAL filters:
-//   ValidationFilter   - validates every request DTO (4.x)
-//   StokvelScopeFilter - 6.1: any route with {stokvelId} must pass the stokvel-scoped authorization first
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<StokvelScopeFilter>();
@@ -46,13 +43,11 @@ builder.Services.AddControllers(options =>
 })
 .AddJsonOptions(o => o.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 
-// The OpenAPI generator reads THESE options. Strict here is what removes "or string" from the generated document.
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 
 builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// OpenAPI + a Bearer scheme so Scalar shows a box for pasting the access token.
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer<ExampleOperationTransformer>();
@@ -75,10 +70,9 @@ builder.Services.AddOpenApi(options =>
     });
 });
 
-// ---- Secrets: fail at startup, with the fix in the message ----
 var connectionString = builder.Configuration.GetConnectionString("RondiTrack")
     ?? throw new InvalidOperationException(
-        "Setting 'ConnectionStrings__RondiTrack' is missing (the database connection string). " +
+        "Setting 'ConnectionStrings__RondiTrack' is missing. " +
         "In Docker or on a server set it as the environment variable ConnectionStrings__RondiTrack. " +
         "For local development: dotnet user-secrets set \"ConnectionStrings:RondiTrack\" \"<your connection string>\" --project RondiTrack.Api");
 
@@ -86,12 +80,11 @@ var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<Jw
 jwtOptions.EnsureValid();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 
-// ---- Authentication: "who are you?" ----
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.MapInboundClaims = false;   // keep "sub" and "role" as they are in the token
+        options.MapInboundClaims = false;   
 
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -101,14 +94,13 @@ builder.Services
             ValidAudience = jwtOptions.Audience,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],   // never let the token pick its own algorithm
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],   
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30),                // default is 5 minutes, which would stretch our short tokens
+            ClockSkew = TimeSpan.FromSeconds(30),                
             NameClaimType = JwtRegisteredClaimNames.Sub,
             RoleClaimType = AppClaims.Role
         };
 
-        // 401 and 403 from the auth middleware use the SAME problem+json shape as every other error.
         options.Events = new JwtBearerEvents
         {
             OnChallenge = async context =>
@@ -125,7 +117,6 @@ builder.Services
             },
             OnForbidden = context =>
             {
-                // 6.2: a 403 from the platform-role check is an authorization refusal too: count and log it.
                 AuthorizationRefusals.ReportForbidden(context.HttpContext);
                 return ProblemResponseWriter.WriteAsync(context.HttpContext,
                     StatusCodes.Status403Forbidden, "auth.forbidden", "You do not have permission to perform this action.");
@@ -133,16 +124,12 @@ builder.Services
         };
     });
 
-// ---- Authorization: "what may you do?" ----
 builder.Services.AddAuthorization(options =>
 {
-    // Secure by default: an endpoint with no [Authorize] / [AllowAnonymous] still needs a signed-in user.
     options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 
-    // Policy on the token's PLATFORM role (a policy, so many endpoints can share one rule).
     options.AddPolicy(Policies.PlatformAdmin, p => p.RequireRole(PlatformRoles.PlatformAdmin));
 
-    // Policies on the caller's role IN ONE STOKVEL (looked up in the database by the handlers).
     options.AddPolicy(Policies.StokvelMember,
         p => p.AddRequirements(new StokvelRoleRequirement(StokvelMemberRole.Member)));
     options.AddPolicy(Policies.StokvelTreasurer,
@@ -153,19 +140,15 @@ builder.Services.AddAuthorization(options =>
         p => p.AddRequirements(new RecordContributionRequirement()));
 });
 
-// Handlers are Scoped: they read the database through a Scoped repository.
 builder.Services.AddScoped<IAuthorizationHandler, StokvelRoleHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, RecordContributionHandler>();
 builder.Services.AddScoped<StokvelAccessChecker>();
 
 builder.Services.AddSingleton(TimeProvider.System);
-
-// 6.2: the business counters (one Meter for the whole API). Singleton: counters are created once and shared.
 builder.Services.AddSingleton<RondiTrackMetrics>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
-// ---- Data: ONE store (PostgreSQL). Every repository that holds a DbContext is Scoped. ----
 builder.Services.AddDbContext<RondiTrackDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
@@ -174,23 +157,18 @@ builder.Services.AddScoped<IStokvelMemberRepository, SqlStokvelMemberRepository>
 builder.Services.AddScoped<IContributionRepository, EfContributionRepository>();
 builder.Services.AddScoped<IContributionCycleRepository, EfContributionCycleRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
-
-// 6.4: idempotency keys live in PostgreSQL (Scoped, because it holds a DbContext).
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 
-// Services depend on Scoped repositories, so they are Scoped too.
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IMembershipService, MembershipService>();
-// 6.2: ContributionService does the work; the Instrumented wrapper counts each NEW contribution.
 builder.Services.AddScoped<ContributionService>();
 builder.Services.AddScoped<IContributionService>(sp => new InstrumentedContributionService(
     sp.GetRequiredService<ContributionService>(), sp.GetRequiredService<RondiTrackMetrics>()));
-// 6.2: PayoutService does the work; the Instrumented wrapper owns the payout.process span and the payout counter.
 builder.Services.AddScoped<PayoutService>();
 builder.Services.AddScoped<IPayoutService>(sp => new InstrumentedPayoutService(
     sp.GetRequiredService<PayoutService>(), sp.GetRequiredService<RondiTrackMetrics>()));
 builder.Services.AddScoped<AuthService>();
-// ---- 6.4 background jobs: bad settings stop the app at startup, naming the setting ----
+
 var cycleCloseOptions = builder.Configuration.GetSection(CycleCloseOptions.SectionName).Get<CycleCloseOptions>() ?? new CycleCloseOptions();
 cycleCloseOptions.EnsureValid();
 builder.Services.Configure<CycleCloseOptions>(builder.Configuration.GetSection(CycleCloseOptions.SectionName));
@@ -206,61 +184,46 @@ builder.Services.AddSingleton<HousekeepingJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HousekeepingJob>());
 builder.Services.AddScoped<IHomeService, HomeService>();
 
-// ---- Centralized error handling ----
 builder.Services.AddExceptionHandler<RondiTrackExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context =>
     {
-        // 6.3: the framework's own bare errors get the SAME shape as ours: type, title, status, detail, instance, correlationId.
         var problem = context.ProblemDetails;
         problem.Type = $"urn:ronditrack:error:http.{problem.Status}";
         problem.Title = $"http.{problem.Status}";
         problem.Detail ??= "The request could not be completed.";
         problem.Instance ??= context.HttpContext.Request.Path;
-        problem.Extensions.Remove("traceId");     // one id only: correlationId
+        problem.Extensions.Remove("traceId");     
         problem.Extensions["correlationId"] = Correlation.GetId(context.HttpContext);
     });
+
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddRondiTrackRateLimiting(builder.Configuration);
-
-
-// ======================= 6.2 OBSERVABILITY: three signals, three questions =======================
-//   Logs   answer "what happened to this request?"      (ILogger, as before)
-//   Traces answer "where did the time go?"               (one span per request + one per SQL command + our own)
-//   Metrics answer "how often, and is it getting worse?" (counters with small, fixed tag sets)
-// Everything is labelled "ronditrack-api". Nothing leaves the process unless OTEL_EXPORTER_OTLP_ENDPOINT is set,
-// so tests and CI never need a dashboard.
-
 
 var openTelemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("ronditrack-api"))
     .WithTracing(tracing =>
     {
-        // One span per incoming request, except the platform's health probes (they would bury real traffic).
         tracing.AddAspNetCoreInstrumentation(options =>
             options.Filter = httpContext => !httpContext.Request.Path.StartsWithSegments("/health"));
-        tracing.AddNpgsql();                                  // one child span per SQL command (placeholders, never values)
-        tracing.AddSource(RondiTrackTelemetry.ActivitySourceName);   // our own payout.process span
-        tracing.AddProcessor(new QueryStringRedactionProcessor());   // URL query strings can carry page tokens (= amounts)
+        tracing.AddNpgsql();                                  
+        tracing.AddSource(RondiTrackTelemetry.ActivitySourceName);   
+        tracing.AddProcessor(new QueryStringRedactionProcessor());   
     })
     .WithMetrics(metrics =>
     {
-        metrics.AddAspNetCoreInstrumentation();               // request rate, errors, duration
-        metrics.AddMeter("System.Runtime");                   // GC, thread pool, CPU (built into .NET)
-        metrics.AddMeter(RondiTrackMetrics.MeterName);        // our business counters: a meter nobody registers records into the void
+        metrics.AddAspNetCoreInstrumentation();               
+        metrics.AddMeter("System.Runtime");                   
+        metrics.AddMeter(RondiTrackMetrics.MeterName);        
     })
-    .WithLogging();                                           // every ILogger call is ALSO sent to OpenTelemetry
+    .WithLogging();                                           
 
-// Export over OTLP ONLY when the standard environment variable is set (launchSettings.json sets it for `dotnet run`).
 if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
     openTelemetry.UseOtlpExporter();
 
-// ---- Health checks (6.2): liveness runs NO checks, readiness checks PostgreSQL ----
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<RondiTrackDbContext>("database", tags: ["ready"]);
 
-// A slow answer is an unhealthy answer: cap every check. Health:DatabaseTimeoutSeconds = 0 removes the cap
-// (only for the "before" measurement in the README).
 var databaseTimeoutSeconds = builder.Configuration.GetValue("Health:DatabaseTimeoutSeconds", 3);
 builder.Services.Configure<HealthCheckServiceOptions>(options =>
 {
@@ -272,14 +235,11 @@ builder.Services.Configure<HealthCheckServiceOptions>(options =>
 
 var app = builder.Build();
 
-// ======================= 2. STARTUP WORK =======================
 using (var scope = app.Services.CreateScope())
 {
-    // Apply migrations so a fresh clone (and a fresh test container) gets the schema automatically.
     var db = scope.ServiceProvider.GetRequiredService<RondiTrackDbContext>();
     await db.Database.MigrateAsync();
 
-    // Demo data only in Development, and only when a seed password is configured (user-secrets).
     if (app.Environment.IsDevelopment())
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DevelopmentSeeder");
@@ -288,24 +248,51 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ======================= 3. REQUEST PIPELINE (order matters) =======================
-app.UseExceptionHandler();   // FIRST: catches anything thrown below and hands it to our handler
-app.UseStatusCodePages();    // turns any remaining empty 4xx into problem+json
+app.UseExceptionHandler();   
+app.UseStatusCodePages();    
+
+// 🚨 CORS PREFLIGHT SHORTCUT: intercept OPTIONS before the fallback policy can 401 it.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Method == "OPTIONS" && context.Request.Headers.ContainsKey("Origin"))
+    {
+        var origin = context.Request.Headers["Origin"].ToString();
+        var allowed = new[] {
+            "http://localhost:3000",
+            "https://upgraded-computing-machine-97qj9prj9p64h75q-3000.app.github.dev"
+        };
+        if (allowed.Contains(origin))
+        {
+            context.Response.StatusCode = 204;
+            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+            context.Response.Headers["Access-Control-Allow-Headers"] =
+                context.Request.Headers["Access-Control-Request-Headers"].ToString();
+            context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
+            context.Response.Headers["Access-Control-Max-Age"] = "600";
+            return;
+        }
+    }
+    await next();
+});
+
+// 1. CORS for actual requests (OPTIONS already handled above)
+app.UseCors(CorsPolicies.Frontend);
 
 if (app.Environment.IsDevelopment())
 {
-    // The fallback policy covers EVERY endpoint, including the docs, so they must opt out.
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference().AllowAnonymous();
 }
 
 app.UseHttpsRedirection();
-app.UseCors(CorsPolicies.Frontend); // first thing that looks at the request, so a preflight never reaches authentication 
-app.UseAuthentication();   // who are you?
-app.UseRateLimiter(); // after authentication (needs the user id), before authorization (which hits the database)
-app.UseAuthorization();    // what may you do? (fallback policy + [Authorize])
-app.MapControllers();
 
-// The platform has no token, so the probes opt out of the fallback policy. They return ONLY "Healthy" or "Unhealthy".
+app.UseAuthentication();   
+app.UseRateLimiter();      
+app.UseAuthorization();    
+
+app.MapControllers().RequireCors(CorsPolicies.Frontend);
+
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
     .AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") })
@@ -313,7 +300,6 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 
 app.Run();
 
-// Makes the auto-generated Program class visible to the test project (WebApplicationFactory<Program>).
 public partial class Program
 {
 }

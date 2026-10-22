@@ -5,17 +5,30 @@ import { StokvelSwitcher } from '../components/StokvelSwitcher'
 import { ErrorView } from '../components/ErrorView'
 import { ContributionList } from '../components/ContributionList'
 
-export function HomePage() {
+type Props = {
+  onSignOut: () => void
+}
+
+export function HomePage({ onSignOut }: Props) {
   const home = useHome()
   const stokvels = useStokvels()
   const logout = useLogout()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // On first load, auto-select the first stokvel.
   const effectiveId = selectedId ?? stokvels.data?.[0]?.id ?? null
 
   const cycles = useCycles(effectiveId ?? undefined)
   const contributions = useContributions(effectiveId ?? undefined)
+
+  const handleSignOut = () => {
+    // onSettled runs whether the network call succeeds or fails.
+    // We tell the parent to wipe its state and re-check auth.
+    logout.mutate(undefined, {
+      onSettled: () => {
+        onSignOut()
+      }
+    })
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -23,10 +36,11 @@ export function HomePage() {
         <h1 className="text-xl font-semibold">My stokvels</h1>
         <button
           type="button"
-          onClick={() => logout.mutate()}
+          onClick={handleSignOut}
           className="min-h-9 rounded border px-3 text-sm"
+          disabled={logout.isPending}
         >
-          Sign out
+          {logout.isPending ? 'Signing out…' : 'Sign out'}
         </button>
       </header>
 
