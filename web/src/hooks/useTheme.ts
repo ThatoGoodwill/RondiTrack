@@ -8,7 +8,9 @@ function readStored(): Mode {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
     if (v === 'light' || v === 'dark' || v === 'system') return v
-  } catch {}
+  } catch {
+    // private browsing: localStorage is blocked, fall back to system
+  }
   return 'system'
 }
 
@@ -23,7 +25,11 @@ export function useTheme() {
 
   useEffect(() => {
     applyTheme(mode)
-    try { localStorage.setItem(STORAGE_KEY, mode) } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, mode)
+    } catch {
+      // private browsing: cannot save theme preference
+    }
   }, [mode])
 
   // System-mode OS change listener
