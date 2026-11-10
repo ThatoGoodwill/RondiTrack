@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "test": "vitest",
     "generate:api": "openapi-typescript http://localhost:8080/openapi/v1.json -o src/api/schema.d.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:types": "openapi-typescript http://localhost:8080/openapi/v1.json -o src/api/schema.d.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
@@ -28,7 +29,10 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tailwindcss": "4.3.3",
-    "tw-animate-css": "1.4.0"
+    "tw-animate-css": "1.4.0",
+    "react-hook-form": "7.65.0",
+    "@hookform/resolvers": "5.2.2",
+    "zod": "4.1.12"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
@@ -53,6 +57,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2",
     "vite": "8.3.4",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "msw": "2.11.6"
   }
 }

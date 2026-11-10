@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +34,9 @@ public class StokvelContributionsController(
         [FromQuery] string? pageToken,
         [FromQuery] string? sort,
         [FromQuery] Guid? cycleId,
+        [FromQuery] Guid? member,
+        [FromQuery(Name = "from")] DateTimeOffset? from,
+        [FromQuery(Name = "to")] DateTimeOffset? to,
         CancellationToken ct)
     {
         if (pageSize is < 0)
@@ -45,8 +48,14 @@ public class StokvelContributionsController(
             throw new ValidationFailedException("paging.sort_invalid",
                 "Sort must be RecordedAt or Amount, optionally followed by _asc or _desc.");
 
+        if (from.HasValue && to.HasValue && from.Value >= to.Value)
+            throw new ValidationFailedException("contributions.date_range_invalid", "The end must be later than the start.");
+        if (member.HasValue && !await context.StokvelMembers.AsNoTracking()
+            .AnyAsync(m => m.StokvelId == stokvelId && m.UserId == member.Value, ct))
+            throw new ValidationFailedException("contributions.member_invalid", "Choose a member of this stokvel.");
         var sortKey = $"{field}_{(descending ? "desc" : "asc")}";
-        var fingerprint = PageToken.Fingerprint(sortKey, cycleId?.ToString());
+        var filters = $"{cycleId?.ToString() ?? ""}|{member?.ToString() ?? ""}|{from?.ToUniversalTime().ToString("O") ?? ""}|{to?.ToUniversalTime().ToString("O") ?? ""}";
+        var fingerprint = PageToken.Fingerprint(sortKey, filters);
 
         var decoded = PageToken.Decode(pageToken);
         if (pageToken is not null && decoded is null)
@@ -57,6 +66,12 @@ public class StokvelContributionsController(
         IQueryable<Contribution> query = context.Contributions.AsNoTracking().Where(c => c.StokvelId == stokvelId);
         if (cycleId is { } cid)
             query = query.Where(c => c.ContributionCycleId == cid);
+        if (member is { } mid)
+            query = query.Where(c => c.UserId == mid);
+        if (from is { } start)
+            query = query.Where(c => c.RecordedAt >= start);
+        if (to is { } end)
+            query = query.Where(c => c.RecordedAt < end);
 
         if (field == ContributionSortField.RecordedAt)
         {

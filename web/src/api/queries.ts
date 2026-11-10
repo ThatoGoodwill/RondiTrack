@@ -25,6 +25,7 @@ export const queryKeys = {
   stokvel: (id: string) => ['stokvels', id] as const,
   cycles: (id: string) => ['stokvels', id, 'cycles'] as const,
   contributions: (id: string) => ['stokvels', id, 'contributions'] as const,
+  members: (id: string) => ['stokvels', id, 'members'] as const,
 }
 
 // ---------------- Auth ----------------
@@ -140,3 +141,15 @@ export function wireSignOutToCache(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export { ApiError }
+
+export function useMembers(id: string | undefined) {
+  return useQuery({
+    queryKey: id ? queryKeys.members(id) : ['stokvels', 'none', 'members'],
+    enabled: !!id,
+    queryFn: async () => unwrap<{
+      items: components['schemas']['MembershipResponse'][]; nextPageToken: string | null
+    }>(api.GET('/api/v1/stokvels/{stokvelId}/members', {
+      params: { path: { stokvelId: id! }, query: { pageSize: 100 } },
+    })),
+  })
+}
