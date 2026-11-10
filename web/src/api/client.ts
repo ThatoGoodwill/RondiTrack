@@ -1,10 +1,11 @@
 import createClient from 'openapi-fetch'
 import { authFetch, ApiError } from '../auth/session'
 import type { paths } from './schema'
+import type { CycleContributionPaths } from './cyclePaths'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
-export const api = createClient<paths>({
+export const api = createClient<paths & CycleContributionPaths>({
   baseUrl: BASE_URL,
   fetch: authFetch,
   credentials: 'include',

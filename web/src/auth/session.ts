@@ -37,18 +37,19 @@ function signalSignedOut() {
 let inFlight: Promise<string | null> | null = null
 
 async function doRefresh(): Promise<string | null> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-  })
-  if (!res.ok) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+      method: 'POST', credentials: 'include',
+    })
+    if (!res.ok) { signalSignedOut(); return null }
+    const body = (await res.json()) as { accessToken?: string }
+    if (!body.accessToken) { signalSignedOut(); return null }
+    token = body.accessToken
+    return token
+  } catch {
     signalSignedOut()
     return null
   }
-  const body = (await res.json()) as { accessToken?: string }
-  const newToken = body.accessToken ?? null
-  token = newToken
-  return newToken
 }
 
 export function refreshAccessToken(): Promise<string | null> {
@@ -92,7 +93,7 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
   const isRequest = input instanceof Request
   const originalRequest = isRequest ? input : new Request(input, init)
   const bodyForRetry = originalRequest.clone()
-  const hadTokenBefore = token !== null
+  const sentWithToken = token
 
   if (token === null) {
     await refreshAccessToken()
@@ -108,11 +109,13 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
 
   if (firstResponse.status !== 401) return firstResponse
 
-  if (!hadTokenBefore) {
-    return firstResponse
-  }
+  if (sentWithToken === null) return firstResponse
 
-  const refreshedToken = inFlight ? await inFlight : await refreshAccessToken()
+  // Other callers may have refreshed while this request was waiting for its 401.
+  // Do not rotate the newly issued refresh cookie again: the API revokes reused families.
+  const refreshedToken = token !== null && token !== sentWithToken
+    ? token
+    : inFlight ? await inFlight : await refreshAccessToken()
   if (refreshedToken === null) {
     return firstResponse
   }

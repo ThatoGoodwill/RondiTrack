@@ -2,6 +2,7 @@ using System.Text.Json;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Domain.Repositories;
 using RondiTrack.Domain;
+using RondiTrack.Infrastructure.Data;
 
 namespace RondiTrack.Api.Services;
 
@@ -28,7 +29,8 @@ public sealed class ContributionService(
     IStokvelRepository stokvels,
     IContributionRepository contributions,
     IContributionCycleRepository cycles,
-    IIdempotencyStore idempotency) : IContributionService
+    IIdempotencyStore idempotency,
+    RondiTrackDbContext context) : IContributionService
 {
     public async Task<Result<ContributionOutcome>> RecordContributionAsync(
         Guid stokvelId, ContributionRequest request, string? idempotencyKey, CancellationToken ct = default)
@@ -72,9 +74,9 @@ public sealed class ContributionService(
             return Fail(ErrorType.Unprocessable, "contribution.cycle_not_found",
                 "No such contribution cycle exists for this stokvel.");
                         // 6.4: a closed cycle has its arrears written; a late payment would contradict them.
-        if (cycle.Status == ContributionCycleStatus.Closed)
+        if (cycle.Status != ContributionCycleStatus.Open)
             return Fail(ErrorType.Unprocessable, "contribution.cycle_closed",
-                "This contribution cycle has been closed. Contact the treasurer.");
+                "Only an open contribution cycle can accept payments.");
 
         if (await contributions.ExistsAsync(stokvelId, request.UserId, request.ContributionCycleId, ct))
             return Fail(ErrorType.Conflict, "contribution.already_recorded",
@@ -84,12 +86,16 @@ public sealed class ContributionService(
         if (!created.IsSuccess) return Result<ContributionOutcome>.Failure(created.Error);
 
         // ---- D. write, then remember the key so a retry finds it ----
+        // The contribution and its idempotency receipt must commit atomically. Otherwise a
+        // dropped response between the two separate SaveChanges calls could produce a 409 on
+        // retry instead of replaying the successfully recorded payment.
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
         await contributions.AddAsync(created.Value, ct);
         var response = ContributionResponse.FromEntity(created.Value, cycle.Label);
-
         await idempotency.SaveAsync(
             new IdempotencyRecord(idempotencyKey, requestHash, JsonSerializer.Serialize(response), DateTimeOffset.UtcNow),
             ct);
+        await transaction.CommitAsync(ct);
 
         return Result<ContributionOutcome>.Success(new ContributionOutcome(response, WasReplayed: false));
     }

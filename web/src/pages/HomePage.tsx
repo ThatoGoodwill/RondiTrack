@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useHome, useStokvels, useCycles, useContributions, useLogout } from '../api/queries'
+import { useHome, useStokvels, useCycles, useContributions, useLogout, useMe, useMembers } from '../api/queries'
 import { StokvelCard } from '../components/StokvelCard'
 import { StokvelSwitcher } from '../components/StokvelSwitcher'
 import { ErrorView } from '../components/ErrorView'
 import { ContributionList } from '../components/ContributionList'
+import { RecordContributionForm } from '../contributions/RecordContributionForm'
 
 type Props = {
   onSignOut: () => void
@@ -11,6 +12,7 @@ type Props = {
 
 export function HomePage({ onSignOut }: Props) {
   const home = useHome()
+  const me = useMe()
   const stokvels = useStokvels()
   const logout = useLogout()
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -19,6 +21,9 @@ export function HomePage({ onSignOut }: Props) {
 
   const cycles = useCycles(effectiveId ?? undefined)
   const contributions = useContributions(effectiveId ?? undefined)
+  const members = useMembers(effectiveId ?? undefined)
+  const currentHome = home.data?.stokvels.find(s => s.stokvelId === effectiveId)
+  const openCycle = cycles.data?.find(c => c.status === 'Open')
 
   const handleSignOut = () => {
     // onSettled runs whether the network call succeeds or fails.
@@ -72,6 +77,23 @@ export function HomePage({ onSignOut }: Props) {
             contributions={contributions.data.pages.flatMap((p) => p.items)}
           />
         )}
+        {cycles.data && cycles.data.length === 0 && <p>No cycles yet. Ask your treasurer to open one.</p>}
+        {contributions.data && contributions.data.pages.every(p => p.items.length === 0) &&
+          <p>No contributions have been recorded yet.</p>}
+        {effectiveId && openCycle && me.data && currentHome && (
+          <div className="mt-5">
+            <RecordContributionForm
+              key={`${effectiveId}-${openCycle.id}`}
+              stokvelId={effectiveId} cycleId={openCycle.id} cycleLabel={openCycle.label}
+              status={openCycle.status} ownId={me.data.id} role={currentHome.role}
+              owedCents={currentHome.currentCycle?.owedCents ?? 0}
+              members={members.data?.items.map(m => ({ userId: m.userId,
+                label: m.userId === me.data!.id ? 'You' : `Member ${m.userId.slice(0, 8)}` })) ?? []}
+            />
+          </div>
+        )}
+        {effectiveId && cycles.data && !openCycle &&
+          <p>No open cycle. Contributions can only be recorded in an open cycle.</p>}
       </section>
     </div>
   )
