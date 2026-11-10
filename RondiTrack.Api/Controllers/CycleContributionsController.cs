@@ -5,6 +5,7 @@ using RondiTrack.Api.Authorization;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Api.Frontend;
 using RondiTrack.Api.Services;
+using RondiTrack.Domain;
 using RondiTrack.Domain.Exceptions;
 
 namespace RondiTrack.Api.Controllers;
