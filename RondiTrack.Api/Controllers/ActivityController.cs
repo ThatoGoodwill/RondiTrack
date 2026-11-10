@@ -73,9 +73,9 @@ public sealed class ActivityController(RondiTrackDbContext db) : ApiControllerBa
         if (combined.Count > size)
         {
             combined.RemoveAt(size);
-            var last = combined[^1];
-            next = PageToken.Encode(new PageTokenData(last.OccurredAt.ToString("O", CultureInfo.InvariantCulture),
-                last.Id, fingerprint));
+            var lastRow = combined[^1];
+            next = PageToken.Encode(new PageTokenData(lastRow.OccurredAt.ToString("O", CultureInfo.InvariantCulture),
+                lastRow.Id, fingerprint));
         }
         var items = combined.Select(r => new ActivityResponse(r.Id, r.StokvelId, r.Kind, r.OccurredAt,
             r.Amount.HasValue ? ContributionResponse.ToCents(r.Amount.Value) : null,
