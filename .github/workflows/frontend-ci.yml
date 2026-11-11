@@ -21,9 +21,7 @@ jobs:
         with:
           node-version: '24'
       - name: Install dependencies
-        run: npm install --no-fund
-      - name: Emit lockfile for reproducible PR
-        run: node -e 'console.log("LOCKFILE_B64=" + require("fs").readFileSync("package-lock.json").toString("base64"))'
+        run: npm ci --no-fund
       - name: Lint
         run: npm run lint
       - name: Unit tests in UTC
@@ -52,11 +50,9 @@ jobs:
         with:
           node-version: '24'
       - name: Install dependencies
-        run: npm install --no-fund
+        run: npm ci --no-fund
       - name: Generate and check types
         run: npm run typecheck
-      - name: Emit lockfile for reproducible PR
-        run: node -e 'console.log("LOCKFILE_B64=" + require("fs").readFileSync("package-lock.json").toString("base64"))'
       - name: Lint
         run: npm run lint
       - name: Unit tests in UTC
