@@ -25,10 +25,10 @@ jobs:
           flutter-version: '3.47.7'
           channel: stable
       - run: flutter create . --org za.co.thatogoodwill --project-name ronditrack_mobile --platforms android,ios
-      # flutter create generates the sample MyApp test; it is not part of RondiTrack.
       - run: rm -f test/widget_test.dart
+      - run: git checkout -- analysis_options.yaml
       - run: flutter pub get
-      # Temporary during initial compile integration; commit formatted files and switch to --set-exit-if-changed before review.
+      # Draft bootstrap. Replace with --set-exit-if-changed after committing formatted files.
       - run: dart format lib test
       - run: dart run build_runner build
       - run: dart analyze --fatal-infos
