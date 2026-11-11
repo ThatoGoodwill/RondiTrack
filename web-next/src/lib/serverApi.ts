@@ -14,7 +14,7 @@ export async function apiForSession() {
   if (!session) { redirect('/login'); throw new Error('No session') }
   return createClient<paths>({
     baseUrl: apiBase(), headers: { Authorization: `Bearer ${session.accessToken}` },
-    fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+    fetch: (request: Request) => fetch(request, { cache: 'no-store' }),
   })
 }
 /** For newly added endpoints not present in the downloaded 2026-10-22 OpenAPI snapshot. */

@@ -15,14 +15,19 @@ export function formatCents(cents: number): string {
 
 
 /** Input is a decimal string, never a binary floating-point rand value. */
+export const MAX_CONTRIBUTION_CENTS = 100_000_000n
+/** Exact money parsing: accepts SA groups, R prefix, comma or period decimals. No rounding. */
 export function parseRandsToCents(input: string): number {
-  const trimmed = input.trim()
-  // No grouping or decimal comma: "1 500,50" is deliberately rejected.
-  if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/.test(trimmed))
-    throw new Error('Enter rands with at most two decimal places, for example 150.50.')
-  const [rands, decimals = ''] = trimmed.split('.')
-  const cents = BigInt(rands) * 100n + BigInt(decimals.padEnd(2, '0'))
-  if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Amount is too large.')
+  const text = input.trim().replace(/\u00a0/g, ' ')
+  const numeric = text.replace(/^R\s?/, '').trim()
+  // A grouping separator is a space, never a comma or period.
+  if (!/^(?:0|[1-9]\d*|[1-9]\d{0,2}(?: \d{3})+)(?:[,.]\d{1,2})?$/.test(numeric))
+    throw new Error('Enter rands, for example R 1 500,50 (at most two decimals).')
+  const raw = numeric.replace(/ /g, '')
+  const [rands, fraction = ''] = raw.split(/[,.]/)
+  const cents = BigInt(rands) * 100n + BigInt(fraction.padEnd(2, '0'))
+  if (cents > MAX_CONTRIBUTION_CENTS || cents > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error('Amount exceeds the API limit.')
   return Number(cents)
 }
 

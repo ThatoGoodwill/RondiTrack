@@ -1,0 +1,71 @@
+name: frontend-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  vite:
+    name: Vite tests, lint, build and audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-fund
+      - name: Emit lockfile for reproducible PR
+        run: node -e 'console.log("LOCKFILE_B64=" + require("fs").readFileSync("package-lock.json").toString("base64"))'
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests in UTC
+        run: npm test -- --run
+        env: { TZ: UTC }
+      - name: Unit tests in South African time
+        run: npm test -- --run
+        env: { TZ: Africa/Johannesburg }
+      - name: Production build
+        run: npm run build
+      - name: Production dependency security
+        run: npm audit --omit=dev --audit-level=moderate
+
+  next:
+    name: Next.js tests, lint, build and audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-next
+    env:
+      API_BASE_URL: http://localhost:8080
+      SESSION_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-fund
+      - name: Generate and check types
+        run: npm run typecheck
+      - name: Emit lockfile for reproducible PR
+        run: node -e 'console.log("LOCKFILE_B64=" + require("fs").readFileSync("package-lock.json").toString("base64"))'
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests in UTC
+        run: npm test
+        env: { TZ: UTC }
+      - name: Unit tests in South African time
+        run: npm test
+        env: { TZ: Africa/Johannesburg }
+      - name: Production build
+        run: npm run build
+      - name: Production dependency security
+        run: npm audit --omit=dev --audit-level=moderate
