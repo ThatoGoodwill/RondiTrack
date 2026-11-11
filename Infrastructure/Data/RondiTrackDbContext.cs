@@ -6,6 +6,8 @@ namespace RondiTrack.Infrastructure.Data;
 public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
+    public DbSet<PaymentProof> PaymentProofs => Set<PaymentProof>();
     public DbSet<Stokvel> Stokvels => Set<Stokvel>();
     public DbSet<StokvelMember> StokvelMembers => Set<StokvelMember>();
     public DbSet<ContributionCycle> ContributionCycles => Set<ContributionCycle>();
@@ -17,6 +19,23 @@ public sealed class RondiTrackDbContext(DbContextOptions<RondiTrackDbContext> op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<InviteCode>(entity =>
+        {
+            entity.ToTable("InviteCodes");
+            entity.HasKey(i => i.CodeHash);
+            entity.Property(i => i.CodeHash).HasMaxLength(64);
+            entity.HasIndex(i => i.StokvelId);
+            entity.HasOne<Stokvel>().WithMany().HasForeignKey(i => i.StokvelId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<PaymentProof>(entity =>
+        {
+            entity.ToTable("PaymentProofs");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.MimeType).HasMaxLength(64).IsRequired();
+            entity.Property(p => p.Bytes).HasColumnType("bytea").IsRequired();
+            entity.HasIndex(p => p.ContributionId).IsUnique();
+            entity.HasOne<Contribution>().WithMany().HasForeignKey(p => p.ContributionId).OnDelete(DeleteBehavior.Restrict);
+        });
         // ---- User ----
         modelBuilder.Entity<User>(entity =>
         {

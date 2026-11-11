@@ -1,7 +1,8 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RondiTrack.Api.Observability;
+using RondiTrack.Api.Services;
 using RondiTrack.Domain;
 using RondiTrack.Infrastructure.Data;
 
@@ -155,7 +156,7 @@ public sealed class CycleCloseJob(
             var targetCents = ToCents(cycle.TargetAmount);
             foreach (var memberId in memberIds)   // EVERY member is assessed: nobody is skipped
             {
-                var shortfall = targetCents - ToCents(paid.GetValueOrDefault(memberId));
+                var shortfall = CycleArrearsRules.ShortfallCents(targetCents, ToCents(paid.GetValueOrDefault(memberId)));
                 if (shortfall <= 0) continue;     // paid in full (or more): no arrears
                 db.ArrearsRecords.Add(ArrearsRecord.Create(stokvelId, cycle.Id, memberId, shortfall, now));
                 arrearsCount++;

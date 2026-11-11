@@ -8,3 +8,9 @@ body { background: #f7f8fa; color: #172033; font-family: Arial, Helvetica, sans-
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: .25rem; }
 .muted { color: #5a6b7b; }
+
+/* WCAG 2.2: keep keyboard focus visible and away from sticky chrome. */
+html { scroll-padding: 5rem 0; }
+:focus-visible { outline: 3px solid #d97706; outline-offset: 3px; }
+button, a, input, select { min-height: 24px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

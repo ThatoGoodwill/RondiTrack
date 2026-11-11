@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RondiTrack.Api.Contracts;
 using RondiTrack.Domain.Repositories;
@@ -69,7 +69,14 @@ public class ContributionCyclesController(
     {
         await EnsureStokvelExists(stokvelId, ct);
 
-        var cycle = ContributionCycle.Create(stokvelId, request.Label, request.TargetAmount).ThrowIfFailure();
+        // Open cycles are an explicit Treasurer action; there must never be two open at once.
+        if (await db.ContributionCycles.AnyAsync(c => c.StokvelId == stokvelId && c.Status == ContributionCycleStatus.Open, ct))
+            throw new ConflictException("cycle.already_open", "Close the existing cycle before opening a new one.");
+        var todaySast = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow,
+            "Africa/Johannesburg").DateTime);
+        if (request.EndsOn is { } end && end < todaySast)
+            throw new ValidationFailedException("cycle.end_date_past", "The end date must be today or later (South African time).");
+        var cycle = ContributionCycle.Create(stokvelId, request.Label, request.TargetAmount, request.EndsOn).ThrowIfFailure();
         await cycles.AddAsync(cycle, ct);
 
         var response = ContributionCycleResponse.FromEntity(cycle, collectedCents: 0L);
