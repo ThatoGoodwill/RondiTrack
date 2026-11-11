@@ -38,7 +38,7 @@ public sealed class PaymentProofController(RondiTrackDbContext db) : ApiControll
             throw new ConflictException("proof.cycle_closed", "Proofs cannot be changed after the cycle closes.");
         if (file is null || file.Length == 0 || file.Length > MaxFileBytes)
             throw new ValidationFailedException("proof.invalid_size", "Choose a document up to 5 MB.");
-        await using var stream = file.OpenReadStream(MaxFileBytes + 1);
+        await using var stream = file.OpenReadStream();
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, ct);
         if (buffer.Length > MaxFileBytes)
