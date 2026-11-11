@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../data/fake_home_repository.dart';
-import '../domain/home_repository.dart';
-import '../domain/models.dart';
+import 'package:ronditrack_mobile/lib/features/home/data/fake_home_repository.dart';
+import 'package:ronditrack_mobile/lib/features/home/domain/home_repository.dart';
+import 'package:ronditrack_mobile/lib/features/home/domain/models.dart';
 
 part 'providers.g.dart';
 
@@ -11,13 +11,16 @@ HomeRepository homeRepository(Ref ref) => const FakeHomeRepository();
 
 @Riverpod(keepAlive: true)
 class SelectedPersona extends _$SelectedPersona {
+  /// RondiTrack override declaration.
   @override
   String build() => 'lerato';
   void select(String persona) => state = persona;
+/// RondiTrack member declaration.
 }
 
 @riverpod
 class MemberHome extends _$MemberHome {
+  /// RondiTrack override declaration.
   @override
   Future<List<HomeEntry>> build() async {
     final persona = ref.watch(selectedPersonaProvider);
@@ -25,6 +28,7 @@ class MemberHome extends _$MemberHome {
   }
   Future<void> reload() async {
     ref.invalidateSelf();
+    /// RondiTrack await declaration.
     await future;
   }
 }
@@ -34,5 +38,6 @@ class MemberHome extends _$MemberHome {
 @riverpod
 Future<StokvelDetails> stokvelDetails(Ref ref, String id) async {
   final persona = ref.watch(selectedPersonaProvider);
+  /// RondiTrack return declaration.
   return ref.watch(homeRepositoryProvider).loadDetail(persona, id);
 }

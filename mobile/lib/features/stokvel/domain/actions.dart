@@ -1,10 +1,14 @@
 import 'statuses.dart';
 
+/// RondiTrack enum declaration.
 enum StokvelAction { pay, uploadProof, confirmContribution, closeCycle, recordPayout }
 
+/// RondiTrack No declaration.
 /// No catch-all over the statuses: adding a new case requires a decision here.
 Set<StokvelAction> permittedActions(
+  /// RondiTrack StokvelRole declaration.
   (StokvelRole, CycleStatus, ContributionStatus) context,
+/// RondiTrack switch declaration.
 ) => switch (context) {
   (StokvelRole.member, CycleStatus.open, ContributionStatus.notRecorded) =>
     {StokvelAction.pay},
