@@ -1,21 +1,17 @@
-import 'package:ronditrack_mobile/lib/core/money/cents.dart';
-import 'package:ronditrack_mobile/lib/features/stokvel/domain/statuses.dart';
-import 'package:ronditrack_mobile/lib/features/home/domain/home_repository.dart';
-import 'package:ronditrack_mobile/lib/features/home/domain/models.dart';
+import '../../../core/money/cents.dart';
+import '../../stokvel/domain/statuses.dart';
+import '../domain/home_repository.dart';
+import '../domain/models.dart';
 
-/// RondiTrack class declaration.
 class FakeHomeRepository implements HomeRepository {
-  /// RondiTrack const declaration.
-  const new({this.delay = const Duration(milliseconds: 150)});
+  const FakeHomeRepository({this.delay = const Duration(milliseconds: 150)});
 
-  /// RondiTrack final declaration.
   final Duration delay;
 
   Future<void> _latency() async {
     if (delay != Duration.zero) await Future<void>.delayed(delay);
   }
 
-  /// RondiTrack static declaration.
   static final ubuntu = HomeEntry(
     membership: const Membership(stokvelId: 'ubuntu', role: StokvelRole.member),
     name: 'Ubuntu Savers', arrearsCents: const Cents(49990),
@@ -30,7 +26,6 @@ class FakeHomeRepository implements HomeRepository {
     name: 'Umoja Grocery Club', arrearsCents: const Cents(0),
     currentCycle: const CurrentCycle(
       id: 'grocery-cycle', label: '2026-11', status: CycleStatus.open,
-      /// RondiTrack paidCents declaration.
       paidCents: Cents(35050), owedCents: Cents(0), endsOnDate: '2026-11-30',
     ),
   );
@@ -47,7 +42,6 @@ class FakeHomeRepository implements HomeRepository {
   Future<List<HomeEntry>> loadHome(String persona) async {
     await _latency();
     return switch (persona) {
-      /// RondiTrack lerato declaration.
       'lerato' => [ubuntu, grocery],
       'sipho' => [friday, HomeEntry(
         membership: const Membership(stokvelId: 'ubuntu', role: StokvelRole.treasurer),

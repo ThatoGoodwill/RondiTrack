@@ -1,16 +1,11 @@
 import 'package:flutter/services.dart' show appFlavor;
 
-/// Documented RondiTrack AppConfig behavior.
 class AppConfig {
-  /// Documented RondiTrack new behavior.
-  const new({required this.flavor, required this.apiBaseUrl});
+  const AppConfig({required this.flavor, required this.apiBaseUrl});
 
-  /// Documented RondiTrack String behavior.
   final String flavor;
-  /// Documented RondiTrack Uri behavior.
   final Uri apiBaseUrl;
 
-  /// Documented RondiTrack AppConfig behavior.
   static AppConfig fromDefines({
     required String flavor,
     required String apiBaseUrl,
@@ -31,7 +26,6 @@ class AppConfig {
   }
 
   static AppConfig load() => fromDefines(
-    /// Documented RondiTrack flavor behavior.
     flavor: const String.fromEnvironment('flavor'),
     apiBaseUrl: const String.fromEnvironment('apiBaseUrl'),
     nativeFlavor: appFlavor,

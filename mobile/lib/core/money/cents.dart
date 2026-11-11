@@ -1,7 +1,5 @@
 // A type, not a double: all arithmetic stays in integer cents.
-/// Documented RondiTrack type behavior.
 extension type const Cents(int value) {
-  /// Documented RondiTrack String behavior.
   String formatZa() {
     final negative = value < 0;
     final absolute = value.abs();
@@ -15,24 +13,17 @@ extension type const Cents(int value) {
   }
 }
 
-/// Documented RondiTrack class behavior.
 sealed class RandParseResult {
-  const new();
+  const RandParseResult();
 }
 
-/// Documented RondiTrack class behavior.
 final class ValidRands extends RandParseResult {
-  /// Documented RondiTrack new behavior.
-  const new(this.cents);
-  /// Documented RondiTrack Cents behavior.
+  const ValidRands(this.cents);
   final Cents cents;
 }
 
-/// Documented RondiTrack class behavior.
 final class InvalidRands extends RandParseResult {
-  /// Documented RondiTrack new behavior.
-  const new(this.reason);
-  /// Documented RondiTrack String behavior.
+  const InvalidRands(this.reason);
   final String reason;
 }
 
