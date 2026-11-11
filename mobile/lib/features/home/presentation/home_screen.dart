@@ -40,7 +40,7 @@ class HomeScreen extends ConsumerWidget {
         data: (entries) => entries.isEmpty
           ? const Center(child: Text('You do not belong to any stokvels yet. Ask for an invite.'))
           : RefreshIndicator(
-              onRefresh: () => ref.refresh(memberHomeProvider.future).then<void>((_) {}),,
+              onRefresh: () => ref.refresh(memberHomeProvider.future).then<void>((_) {}),
               child: ListView.builder(
                 key: const Key('home-list'),
                 itemCount: entries.length,
