@@ -1,23 +1,24 @@
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/fake_home_repository.dart';
 import '../domain/home_repository.dart';
 import '../domain/models.dart';
 
-part 'providers.g.dart';
+// Riverpod's state lifetime is explicit. Freezed continues to generate model code.
+// Explicit providers avoid the unresolved-type failure in generator 4.0.9.
+final homeRepositoryProvider = Provider<HomeRepository>(
+  (ref) => const FakeHomeRepository(),
+);
 
-// The ONLY line Week 11 will change when a real API repository is ready.
-@Riverpod(keepAlive: true)
-HomeRepository homeRepository(Ref ref) => const FakeHomeRepository();
-
-@Riverpod(keepAlive: true)
-class SelectedPersona extends _$SelectedPersona {
+class SelectedPersona extends Notifier<String> {
   @override
   String build() => 'lerato';
-  void select(String persona) => state = persona;
+  void select(String value) => state = value;
 }
+final selectedPersonaProvider = NotifierProvider<SelectedPersona, String>(
+  SelectedPersona.new,
+);
 
-@riverpod
-class MemberHome extends _$MemberHome {
+class MemberHome extends AsyncNotifier<List<HomeEntry>> {
   @override
   Future<List<HomeEntry>> build() async {
     final persona = ref.watch(selectedPersonaProvider);
@@ -28,11 +29,13 @@ class MemberHome extends _$MemberHome {
     await future;
   }
 }
+final memberHomeProvider = AsyncNotifierProvider.autoDispose<MemberHome, List<HomeEntry>>(
+  MemberHome.new,
+);
 
-// A family id is part of provider identity. Switching ids cannot display stale
-// contributions from the previous stokvel for even a frame.
-@riverpod
-Future<StokvelDetails> stokvelDetails(Ref ref, String id) async {
-  final persona = ref.watch(selectedPersonaProvider);
-  return ref.watch(homeRepositoryProvider).loadDetail(persona, id);
-}
+final stokvelDetailsProvider = FutureProvider.autoDispose.family<StokvelDetails, String>(
+  (ref, id) async {
+    final persona = ref.watch(selectedPersonaProvider);
+    return ref.watch(homeRepositoryProvider).loadDetail(persona, id);
+  },
+);
