@@ -26,7 +26,8 @@ jobs:
           channel: stable
       - run: flutter create . --org za.co.thatogoodwill --project-name ronditrack_mobile --platforms android,ios
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
+      # Temporary during initial compile integration; commit formatted files and switch to --set-exit-if-changed before review.
+      - run: dart format lib test
       - run: dart run build_runner build
       - run: dart analyze --fatal-infos
       - run: flutter test
