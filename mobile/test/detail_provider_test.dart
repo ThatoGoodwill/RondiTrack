@@ -6,6 +6,7 @@ import 'package:ronditrack_mobile/features/home/presentation/providers.dart';
 void main() {
   test('the family isolates identities, and missing stokvels have one error', () async {
     final container = ProviderContainer(
+      retry: (count, error) => null,
       overrides: [homeRepositoryProvider.overrideWithValue(
         const FakeHomeRepository(delay: Duration.zero))],
     );
