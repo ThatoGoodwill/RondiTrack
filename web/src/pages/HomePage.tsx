@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useHome, useStokvels, useCycles, useContributions, useLogout, useMe, useMembers } from '../api/queries'
+import { useHome, useStokvels, useStokvel, useCycles, useContributions, useLogout, useMe, useMembers } from '../api/queries'
 import { StokvelCard } from '../components/StokvelCard'
 import { StokvelSwitcher } from '../components/StokvelSwitcher'
 import { ErrorView } from '../components/ErrorView'
 import { ContributionList } from '../components/ContributionList'
 import { RecordContributionForm } from '../contributions/RecordContributionForm'
+import { CreateCycleForm } from '../contributions/CreateCycleForm'
 
 type Props = {
   onSignOut: () => void
@@ -19,6 +20,7 @@ export function HomePage({ onSignOut }: Props) {
 
   const effectiveId = selectedId ?? stokvels.data?.[0]?.id ?? null
 
+  const stokvel = useStokvel(effectiveId ?? undefined)
   const cycles = useCycles(effectiveId ?? undefined)
   const contributions = useContributions(effectiveId ?? undefined)
   const members = useMembers(effectiveId ?? undefined)
@@ -92,8 +94,12 @@ export function HomePage({ onSignOut }: Props) {
             />
           </div>
         )}
-        {effectiveId && cycles.data && !openCycle &&
-          <p>No open cycle. Contributions can only be recorded in an open cycle.</p>}
+        {effectiveId && cycles.data && !openCycle && <>
+          <p>No open cycle. Contributions can only be recorded in an open cycle.</p>
+          {(currentHome?.role === 'Treasurer' || currentHome?.role === 'Admin') && stokvel.data &&
+            <CreateCycleForm stokvelId={effectiveId} targetRands={stokvel.data.contributionAmount} />}
+          {currentHome?.role === 'Member' && <p>Ask your treasurer to open the next cycle.</p>}
+        </>}
       </section>
     </div>
   )

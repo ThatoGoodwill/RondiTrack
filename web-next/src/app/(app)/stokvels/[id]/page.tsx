@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/session'
 import { formatCents } from '@/lib/money'
 import { PinToggle } from '@/components/PinMenu'
 import { ContributionForm } from './ContributionForm'
+import { CreateCycleForm } from './CreateCycleForm'
 import type { Stokvel, Cycle, Membership, Home, Contribution, Page } from '@/lib/types'
 
 async function RecentContributions({ result }: { result: Promise<Page<Contribution>> }) {
@@ -46,6 +47,12 @@ async function StokvelDetail({ id }: { id: string }) {
       {cycle ? <><p>{cycle.label} · {cycle.status}</p><p>Collected: {formatCents(cycle.collectedCents)}</p>
         <p>Still due: {formatCents(cycle.dueCents)}</p></> : <p>No open cycle. A closed or paid-out cycle cannot accept contributions.</p>}
     </div></section>
+  {!cycle && (entry?.role === 'Treasurer' || entry?.role === 'Admin') &&
+    <CreateCycleForm stokvelId={id} initialTarget={String(stokvel.contributionAmount)}
+      initialLabel={new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: '2-digit',
+        timeZone: 'Africa/Johannesburg' }).formatToParts(new Date())
+        .filter(part => part.type === 'year' || part.type === 'month')
+        .map(part => part.value).join('-')} />}
   {cycle && <ContributionForm key={`${id}-${cycle.id}`} stokvelId={id} cycleId={cycle.id} cycleLabel={cycle.label}
     role={entry?.role ?? 'Member'} ownId={session.user.id} owedCents={entry?.currentCycle?.owedCents ?? 0}
     members={members.items} initialKey={crypto.randomUUID()} />}
