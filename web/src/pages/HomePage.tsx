@@ -5,6 +5,8 @@ import { StokvelSwitcher } from '../components/StokvelSwitcher'
 import { ErrorView } from '../components/ErrorView'
 import { ContributionList } from '../components/ContributionList'
 import { RecordContributionForm } from '../contributions/RecordContributionForm'
+import { CycleManagement } from '../components/CycleManagement'
+import { parseRandsToCents } from '../lib/money'
 
 type Props = {
   onSignOut: () => void
@@ -24,6 +26,8 @@ export function HomePage({ onSignOut }: Props) {
   const members = useMembers(effectiveId ?? undefined)
   const currentHome = home.data?.stokvels.find(s => s.stokvelId === effectiveId)
   const openCycle = cycles.data?.find(c => c.status === 'Open')
+  const manager = currentHome?.role === 'Treasurer' || currentHome?.role === 'Admin'
+  const selectedStokvel = stokvels.data?.find(s => s.id === effectiveId)
 
   const handleSignOut = () => {
     // onSettled runs whether the network call succeeds or fails.
@@ -80,6 +84,10 @@ export function HomePage({ onSignOut }: Props) {
         {cycles.data && cycles.data.length === 0 && <p>No cycles yet. Ask your treasurer to open one.</p>}
         {contributions.data && contributions.data.pages.every(p => p.items.length === 0) &&
           <p>No contributions have been recorded yet.</p>}
+        {effectiveId && manager && selectedStokvel && <div className="mt-5">
+          <CycleManagement stokvelId={effectiveId}
+            defaultAmountCents={parseRandsToCents(String(selectedStokvel.contributionAmount))}
+            hasOpenCycle={!!openCycle}/></div>}
         {effectiveId && openCycle && me.data && currentHome && (
           <div className="mt-5">
             <RecordContributionForm

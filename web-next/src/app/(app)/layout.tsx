@@ -22,6 +22,7 @@ async function AppChrome({ children }: { children: React.ReactNode }) {
           <Link className="a" href="/dashboard/treasurer">Treasurer dashboard</Link>
           <Link className="a" href="/stokvels">My stokvels</Link>
           <Link className="a" href="/activity">Activity</Link>
+          <Link className="a" href="/join">Join a stokvel</Link>
         </nav>
         <section><h2 className="mb-2 text-xs font-bold uppercase">Pinned</h2><PinMenu /></section>
         <SignOutForm />
@@ -30,6 +31,8 @@ async function AppChrome({ children }: { children: React.ReactNode }) {
     </div>
   </PinsProvider>
 }
+export const metadata = { robots: { index: false, follow: false } }
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<div className="mx-auto max-w-6xl p-5">Loading account…</div>}>
     <AppChrome>{children}</AppChrome>
