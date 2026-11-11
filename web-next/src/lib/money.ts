@@ -15,7 +15,7 @@ export function formatCents(cents: number): string {
 
 
 /** Input is a decimal string, never a binary floating-point rand value. */
-export const MAX_CONTRIBUTION_CENTS = 9_000_000_000_000n
+export const MAX_CONTRIBUTION_CENTS = 100_000_000n
 /** Exact money parsing: accepts SA groups, R prefix, comma or period decimals. No rounding. */
 export function parseRandsToCents(input: string): number {
   const text = input.trim().replace(/\u00a0/g, ' ')
