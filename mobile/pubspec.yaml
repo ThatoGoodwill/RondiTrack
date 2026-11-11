@@ -1,0 +1,26 @@
+name: ronditrack_mobile
+description: RondiTrack mobile foundations for Week 10 (no live API calls yet)
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.13.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: 3.4.3
+  riverpod_annotation: 4.0.7
+  freezed_annotation: 3.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: 11.0.0
+  riverpod_lint: 3.1.9
+  riverpod_generator: 4.0.9
+  freezed: 4.0.3
+  build_runner: 2.16.2
+
+flutter:
+  uses-material-design: true

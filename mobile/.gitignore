@@ -1,0 +1,11 @@
+# Generated source is recreated in CI before analysis.
+*.g.dart
+*.freezed.dart
+.dart_tool/
+.flutter-plugins*
+.packages
+build/
+.coverage
+.idea/
+android/.gradle/
+ios/Pods/
