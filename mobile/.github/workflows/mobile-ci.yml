@@ -1,0 +1,37 @@
+name: Mobile quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+      - name: Generate Android and iOS scaffolding for this draft
+        working-directory: mobile
+        run: flutter create . --org za.co.thatogoodwill --project-name ronditrack_mobile --platforms android,ios
+      - name: Install pinned dependencies
+        working-directory: mobile
+        run: flutter pub get
+      - name: Format check on authored Dart
+        working-directory: mobile
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Generate Freezed and Riverpod source
+        working-directory: mobile
+        run: dart run build_runner build
+      - name: Strict Dart analyze, including Riverpod plugin
+        working-directory: mobile
+        run: dart analyze --fatal-infos
+      - name: Flutter widget and unit tests
+        working-directory: mobile
+        run: flutter test

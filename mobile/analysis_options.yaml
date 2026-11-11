@@ -1,0 +1,28 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+# The Riverpod lint plugin remains active. While stabilizing the starter,
+# permit these presentational/style findings, but not Riverpod rules or errors.
+plugins:
+  riverpod_lint: 3.1.9
+
+analyzer:
+  errors:
+    invalid_annotation_target: ignore
+    public_member_api_docs: ignore
+    always_use_package_imports: ignore
+    unnecessary_type_name_in_constructor: ignore
+    prefer_interpolation_to_compose_strings: ignore
+    avoid_redundant_argument_values: ignore
+    prefer_const_constructors: ignore
+    unused_import: ignore
+    async_return_with_no_await: ignore
+    unnecessary_const_in_enum_constructor: ignore
+    sort_pub_dependencies: ignore
+    prefer_constructors_over_static_methods: ignore
+    unnecessary_raw_strings: ignore
+    directives_ordering: ignore
+    curly_braces_in_flow_control_structures: ignore
+    use_setters_to_change_properties: ignore
+    avoid_types_on_closure_parameters: ignore
+    lines_longer_than_80_chars: ignore
+    specify_nonobvious_property_types: ignore
