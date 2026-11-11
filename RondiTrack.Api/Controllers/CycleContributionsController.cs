@@ -28,7 +28,7 @@ public sealed class CycleContributionsController(IContributionService service) :
         Guid stokvelId, Guid cycleId, CycleContributionRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey, CancellationToken ct)
     {
-        if (request.AmountInCents <= 0 || request.AmountInCents > 9_000_000_000_000L)
+        if (request.AmountInCents <= 0 || request.AmountInCents > (long)(RondiTrack.Domain.Contribution.MaxAmount * 100m))
             throw new ValidationFailedException("contribution.invalid_amount", "Enter a positive amount in whole cents.");
         await this.EnsureCanRecordContributionAsync(stokvelId, request.UserId);
         var decimalRands = request.AmountInCents / 100m;

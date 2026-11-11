@@ -29,7 +29,7 @@ export function PinsProvider({ children, allowedIds }: { children: React.ReactNo
   const [store] = useState(createPinStore)
   useEffect(() => {
     // Hydration only after mount avoids mismatching server-rendered sidebar markup.
-    void store.persist.rehydrate().then(() => store.getState().keepOnly(allowedIds))
+    void Promise.resolve(store.persist.rehydrate()).then(() => store.getState().keepOnly(allowedIds))
   }, [store, allowedIds.join('|')]) // stable membership signature, no secret data
   return <Context.Provider value={store}>{children}</Context.Provider>
 }

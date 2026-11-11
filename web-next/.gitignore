@@ -1,5 +1,8 @@
-/node_modules
-/.next
-/.env.local
-/out
-*.tsbuildinfo
+# Private keys, authentication states, build artifacts and test reports
+.env.local
+.env.*.local
+.next
+node_modules
+e2e/.auth
+playwright-report
+test-results
