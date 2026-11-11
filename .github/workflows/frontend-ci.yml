@@ -1,0 +1,59 @@
+name: frontend-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  vite:
+    name: Vite build and component tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+      - name: Audit
+        run: npm audit --audit-level=moderate
+
+  next:
+    name: Next.js build and component tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-next
+    env:
+      API_BASE_URL: http://localhost:8080
+      SESSION_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+      - name: Audit
+        run: npm audit --audit-level=moderate
