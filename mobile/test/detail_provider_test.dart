@@ -15,9 +15,9 @@ void main() {
     final grocery = stokvelDetailsProvider('grocery');
     final wrong = stokvelDetailsProvider('wrong');
     final subscriptions = [
-      container.listen(ubuntu, (_, __) {}),
-      container.listen(grocery, (_, __) {}),
-      container.listen(wrong, (_, __) {}),
+      container.listen(ubuntu, (_, _) {}),
+      container.listen(grocery, (_, _) {}),
+      container.listen(wrong, (_, _) {}),
     ];
     addTearDown(() {
       for (final subscription in subscriptions) { subscription.close(); }
