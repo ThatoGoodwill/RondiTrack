@@ -228,3 +228,48 @@ The join page is server-rendered with generic metadata; it does not place a priv
 ### CI and known gaps
 
 The `frontend-ci` workflow runs `npm ci`, typecheck/lint, Vitest under both UTC and SAST, builds and production dependency audit. GitHub's .NET backend workflow runs separately. Playwright is configured but **not yet wired into a seeded Compose E2E CI job**. The full suite still needs ten repeated Vitest passes, three repeated Playwright runs, HTML reports, accessibility/keyboard and screen-reader video, and mobile Lighthouse measurements. Red-to-green CI evidence must be collected from actual PR runs, not invented.
+
+## Assignment 9.1 — joining, proof of payment, and safe closing
+
+### API check
+
+These are implemented in the backend source. The automated .NET integration tests have exercised repeated joins and stale close previews; other requested persona and file-security combinations still need live verification.
+
+| Operation | Endpoint / behavior |
+| --- | --- |
+| Treasurer creates invite | `POST /api/v1/stokvels/{stokvelId}/invites`; expires in seven days; cryptographically random 48-hex-character code, stored hashed |
+| Signed-in preview | `GET /api/v1/invites/{code}`; invalid/expired code: generic 404; no member names, balances or payout order |
+| Join | `POST /api/v1/invites/{code}/join`; repeated join is a no-op rather than a duplicate membership |
+| Proof upload | `PUT /api/v1/stokvels/{stokvelId}/contributions/{contributionId}/proof`; valid PDF, PNG or JPEG detected by bytes, not by file extension |
+| Proof download | `GET .../proof`; uploader or this stokvel's Treasurer/Admin only; other users get a non-disclosing 404 |
+| Close preview | `GET /api/v1/stokvels/{stokvelId}/cycles/{cycleId}/close-preview`; returns user display names, amounts owed in cents, sum, SAST date and version |
+| Close cycle | `POST .../close`; sends preview version and an Idempotency-Key; stale version is 409; same key replays without duplicate arrears |
+| Start another cycle | `POST .../cycles`; treasurers create a new open cycle after old ones close, so contribution recording remains available |
+
+### Join flow
+
+| Step / URL | What it shows | Moves forward when |
+| --- | --- | --- |
+| `/join?step=code` | Invite code input, retaining the URL code on Back | Person enters code; URL moves to rules |
+| `/join?code=...&step=rules` | Stokvel name, contribution and frequency, membership count, generic rules and expiry (no personal balances) | Preview succeeds and person chooses Continue |
+| `/join?code=...&step=confirm` | Same details and one Join action; no repeated code entry | Server Action authorizes and joins once |
+
+An invalid/expired code gets a recoverable message rather than a crash. Signed-out invitations redirect to login with a safe `next=` path to return to the same code/step. Step headings must be checked for keyboard focus and announced position.
+
+### Uploads — every hop's limit and authorization
+
+| Hop | Size and type | Response on refusal |
+| --- | --- | --- |
+| Browser validation | PDF, PNG or JPEG, up to 5 MiB | Inline error below file input |
+| Next.js Server Action | 6 MiB body allowance including multipart overhead | Input-specific failure; try a smaller file |
+| ASP.NET Core API | 6 MiB multipart request cap; **5 MiB actual file**; header magic-byte verification | 400 for invalid size/type; 409 on closed cycle |
+
+The proof is stored in PostgreSQL in `PaymentProofs`, not a public object-storage URL. This survives an API container redeploy only while the database's persistent storage survives. API download and the Next `/bff/` proxy both require the requester's session; files use private `no-store`, `nosniff` and a download attachment header. The member can download only their own proof; that stokvel's Treasurer may download the group's proofs. A treasurer of another stokvel sees the same 404 as an unknown proof.
+
+### Closing a cycle
+
+The dialog displays only the API's latest `CycleClosePreview`: each member going into arrears, the exact rand equivalent, the total, the SAST date, and the version. It is not an arithmetic calculation in the browser. Cancel is the safe default. The close request sends the preview version and an Idempotency-Key. A contribution or membership change after preview changes the version; the API refuses the close with a 409 and the user must review a new preview. A successful close changes cycle state and writes arrears plus its idempotency receipt in one transaction. Replaying the same key returns the existing receipt.
+
+### Feedback and known gaps
+
+A wrong file or missing form field is reported **inline**, where the user can correct it. An unanticipated server/network error should stay visible with a correlation reference. Destructive close uses a dialog with explicit consequences; routine completion uses a status/toast. Still required before declaring Assignment 9.1 complete: verify browser focus restoration/ESC, precise file boundaries, real magic-byte rejection, all four proof download roles, stale preview in two browsers, cross-redeploy persistent storage, an actual three-minute screen recording, and live API contract notes with command output.
