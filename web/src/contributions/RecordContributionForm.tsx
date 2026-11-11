@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,9 +25,8 @@ type Props = {
 export function RecordContributionForm(props: Props) {
   const { stokvelId, cycleId, cycleLabel, status, ownId, role, owedCents, members } = props
   const isTreasurer = role === 'Treasurer' || role === 'Admin'
-  const keys = useRef<ContributionIntentKey | null>(null)
-  if (!keys.current) keys.current = new ContributionIntentKey()
-  const sending = useRef(false)
+  const [keys] = useState(() => new ContributionIntentKey())
+  const [sending] = useState(() => ({ current: false }))
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [failure, setFailure] = useState('')
@@ -43,7 +42,7 @@ export function RecordContributionForm(props: Props) {
     setBusy(true); setFailure(''); setNotice('')
     const amountInCents = parseRandsToCents(values.amount)
     const memberId = isTreasurer ? values.memberId : ownId
-    const idempotencyKey = keys.current!.current({ stokvelId, cycleId, memberId, amountInCents })
+    const idempotencyKey = keys.current({ stokvelId, cycleId, memberId, amountInCents })
     try {
       await mutation.mutateAsync({ stokvelId, cycleId, memberId, amountInCents, idempotencyKey })
       await Promise.all([
@@ -51,7 +50,7 @@ export function RecordContributionForm(props: Props) {
         qc.invalidateQueries({ queryKey: queryKeys.contributions(stokvelId) }),
         qc.invalidateQueries({ queryKey: queryKeys.cycles(stokvelId) }),
       ])
-      keys.current!.confirmRecorded()
+      keys.confirmRecorded()
       reset({ amount: centsToInput(owedCents), memberId: ownId })
       const who = members.find(m => m.userId === memberId)?.label ?? 'you'
       setNotice(`Recorded ${formatCents(amountInCents)} for ${who} in ${cycleLabel}.`)
