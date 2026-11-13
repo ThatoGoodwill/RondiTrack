@@ -155,3 +155,121 @@ npm audit
 ```
 
 Please **paste actual results** into PR description, rather than reusing offline smoke output as if it were an npm/Vitest build.
+
+## Assignment 9.2 — tests, performance, accessibility and privacy
+
+**Evidence note:** The following records which code paths are implemented and which require real-browser evidence. Do not record fabricated Lighthouse results or claim an unrun Playwright suite has passed.
+
+### Plan
+
+1. Exact rand-to-cent conversion and South African date boundaries are pure helpers in `src/lib/`. Role rules belong to the API. The Server Action separately validates all inputs.
+2. Vitest handles pure rules and the contribution-form events; Playwright runs whole-page/session/permission flows; NVDA, keyboard-only use and Lighthouse must be checked manually.
+3. Form integration edges are the imported Server Action, the render state, navigation and API. Tests fake the Server Action, **not** the component's React state. Playwright exercises the real app.
+4. API login permits ten attempts per minute per IP by default. E2E should authenticate once per persona, save browser state in `e2e/.auth/` (never commit it), and reuse it across tests. Each CI run needs its own test DB and generated test-only secrets.
+5. The landing/sign-in route can be indexable; `/join?code=` and all signed-in routes must be `noindex`. `/bff/` replies must be private and set `X-Robots-Tag: noindex`.
+6. On an entry-level phone, the home page's largest content is the first populated stokvel card; the API's personal home query and streamed data determine its render. Measure with Lighthouse before claiming improvement.
+7. No drag action is required in the current implementation. Invite code inputs support paste and sign-in supports `autocomplete` with password managers.
+
+### Running the tests
+
+With Node 24 and the API plus a private seeded database running:
+```sh
+npm ci
+npm run typecheck
+npm run lint
+TZ=UTC npm test
+TZ=Africa/Johannesburg npm test
+npm run build
+E2E_SEED_PASSWORD='<password for seeded demo account>' npx playwright install chromium
+E2E_SEED_PASSWORD='<password for seeded demo account>' npx playwright test
+npm audit --omit=dev
+```
+The E2E tests require `API_BASE_URL`, `SESSION_SECRET`, a seeded test database and a production `npm run start` server. `playwright.config.ts` starts that server on port 3000. Never commit the auth state or credentials. On Windows PowerShell, set `$env:E2E_SEED_PASSWORD` rather than using POSIX assignment.
+
+### What's checked where
+
+| Behaviour | Test or manual procedure | Tool |
+| --- | --- | --- |
+| Whole-cents parser, ambiguous/negative inputs and round trips | `src/lib/money.test.ts` | Vitest |
+| SAST half-open date ranges | `src/lib/southAfricanDates.test.ts` | Vitest under both TZ settings |
+| Member does not see treasurer picker; failed payment retains amount and Idempotency-Key | `src/app/(app)/stokvels/[id]/ContributionForm.test.tsx` | RTL + Vitest |
+| Signed-out BFF returns JSON 401 | `e2e/privacy-and-contributions.spec.ts` | Playwright |
+| Signed-in routes noindex and accessible landmark/labels | `e2e/privacy-and-contributions.spec.ts` | Playwright + axe |
+| Keyboard close confirmation and return focus | `e2e/privacy-and-contributions.spec.ts` | Playwright, manual NVDA |
+| Contribution increases cycle total by exact cents | Needs seeded, open cycle with no prior payment | E2E/manual |
+| Private proof upload, invalid file bytes and denied download | API integration + a manual browser scenario | Pending full coverage |
+
+### Accessibility — WCAG 2.2
+
+| Criterion | Flow | Current mitigation | Verification still needed |
+| --- | --- | --- | --- |
+| 2.4.11 focus not obscured | Contribution history / sticky layouts | The page uses focusable labels and ordinary flow | Test at 320 CSS px and with keyboard |
+| 2.5.7 dragging | Payout order | No drag-only interaction exists | Check future reorder UI offers buttons |
+| 2.5.8 targets | File downloads and icon actions | Use native buttons/links | Verify minimum target sizes |
+| 3.3.7 redundant entry | Join and payment retries | URL carries invite code; failed contribution retains value | Keyboard + screen reader |
+| 3.3.8 accessible auth | Sign in | Username/password autocomplete and paste are supported | Test with password manager |
+| Error announcement | Field refusals / success | `role=alert`, `role=status`, labelled form fields | Listen with NVDA |
+
+### Performance: before, after, and why
+
+Do not assume passing a build establishes LCP/CLS/INP. Run the Next production build on a throttled mobile Lighthouse profile three times, using one test stokvel containing 40 members and a year of contributions. Record median LCP (goal below 2.5 s), CLS (below 0.1) and an interactive INP timespan (below 200 ms), both before and after any optimization. No measured baseline or improved metric is claimed yet. Never optimize private payment proofs through a shared image cache.
+
+### Metadata and indexing
+
+| Route | Indexable? | Bot-visible metadata |
+| --- | --- | --- |
+| `/login`, `/register` | Public (at product owner's discretion) | Generic RondiTrack brand |
+| `/join?code=...` | No | Generic stokvel invitation without names, balance or amount |
+| `/dashboard/*`, `/stokvels/*`, `/activity` | No | No personal data |
+| `/bff/*`, proof downloads | No | Auth required; private, no-store; should set `X-Robots-Tag` |
+
+The join page is server-rendered with generic metadata; it does not place a private invite's stokvel name or amount into Open Graph tags. A signed-out preview bot can see a generic invitation only. Verify by requesting the invite URL with `User-Agent: WhatsApp/2` and checking the returned `<head>`.
+
+### CI and known gaps
+
+The `frontend-ci` workflow runs `npm ci`, typecheck/lint, Vitest under both UTC and SAST, builds and production dependency audit. GitHub's .NET backend workflow runs separately. Playwright is configured but **not yet wired into a seeded Compose E2E CI job**. The full suite still needs ten repeated Vitest passes, three repeated Playwright runs, HTML reports, accessibility/keyboard and screen-reader video, and mobile Lighthouse measurements. Red-to-green CI evidence must be collected from actual PR runs, not invented.
+
+## Assignment 9.1 — joining, proof of payment, and safe closing
+
+### API check
+
+These are implemented in the backend source. The automated .NET integration tests have exercised repeated joins and stale close previews; other requested persona and file-security combinations still need live verification.
+
+| Operation | Endpoint / behavior |
+| --- | --- |
+| Treasurer creates invite | `POST /api/v1/stokvels/{stokvelId}/invites`; expires in seven days; cryptographically random 48-hex-character code, stored hashed |
+| Signed-in preview | `GET /api/v1/invites/{code}`; invalid/expired code: generic 404; no member names, balances or payout order |
+| Join | `POST /api/v1/invites/{code}/join`; repeated join is a no-op rather than a duplicate membership |
+| Proof upload | `PUT /api/v1/stokvels/{stokvelId}/contributions/{contributionId}/proof`; valid PDF, PNG or JPEG detected by bytes, not by file extension |
+| Proof download | `GET .../proof`; uploader or this stokvel's Treasurer/Admin only; other users get a non-disclosing 404 |
+| Close preview | `GET /api/v1/stokvels/{stokvelId}/cycles/{cycleId}/close-preview`; returns user display names, amounts owed in cents, sum, SAST date and version |
+| Close cycle | `POST .../close`; sends preview version and an Idempotency-Key; stale version is 409; same key replays without duplicate arrears |
+| Start another cycle | `POST .../cycles`; treasurers create a new open cycle after old ones close, so contribution recording remains available |
+
+### Join flow
+
+| Step / URL | What it shows | Moves forward when |
+| --- | --- | --- |
+| `/join?step=code` | Invite code input, retaining the URL code on Back | Person enters code; URL moves to rules |
+| `/join?code=...&step=rules` | Stokvel name, contribution and frequency, membership count, generic rules and expiry (no personal balances) | Preview succeeds and person chooses Continue |
+| `/join?code=...&step=confirm` | Same details and one Join action; no repeated code entry | Server Action authorizes and joins once |
+
+An invalid/expired code gets a recoverable message rather than a crash. Signed-out invitations redirect to login with a safe `next=` path to return to the same code/step. Step headings must be checked for keyboard focus and announced position.
+
+### Uploads — every hop's limit and authorization
+
+| Hop | Size and type | Response on refusal |
+| --- | --- | --- |
+| Browser validation | PDF, PNG or JPEG, up to 5 MiB | Inline error below file input |
+| Next.js Server Action | 6 MiB body allowance including multipart overhead | Input-specific failure; try a smaller file |
+| ASP.NET Core API | 6 MiB multipart request cap; **5 MiB actual file**; header magic-byte verification | 400 for invalid size/type; 409 on closed cycle |
+
+The proof is stored in PostgreSQL in `PaymentProofs`, not a public object-storage URL. This survives an API container redeploy only while the database's persistent storage survives. API download and the Next `/bff/` proxy both require the requester's session; files use private `no-store`, `nosniff` and a download attachment header. The member can download only their own proof; that stokvel's Treasurer may download the group's proofs. A treasurer of another stokvel sees the same 404 as an unknown proof.
+
+### Closing a cycle
+
+The dialog displays only the API's latest `CycleClosePreview`: each member going into arrears, the exact rand equivalent, the total, the SAST date, and the version. It is not an arithmetic calculation in the browser. Cancel is the safe default. The close request sends the preview version and an Idempotency-Key. A contribution or membership change after preview changes the version; the API refuses the close with a 409 and the user must review a new preview. A successful close changes cycle state and writes arrears plus its idempotency receipt in one transaction. Replaying the same key returns the existing receipt.
+
+### Feedback and known gaps
+
+A wrong file or missing form field is reported **inline**, where the user can correct it. An unanticipated server/network error should stay visible with a correlation reference. Destructive close uses a dialog with explicit consequences; routine completion uses a status/toast. Still required before declaring Assignment 9.1 complete: verify browser focus restoration/ESC, precise file boundaries, real magic-byte rejection, all four proof download roles, stale preview in two browsers, cross-redeploy persistent storage, an actual three-minute screen recording, and live API contract notes with command output.

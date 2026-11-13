@@ -48,10 +48,6 @@ async function submit() {
   await userEvent.click(screen.getByRole('button', { name: 'Record contribution' }))
   await waitFor(() => expect(keysSeen.length).toBeGreaterThan(0))
 }
-async function waitForFinish() {
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Record contribution' })).not.toBeDisabled())
-}
-
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
 beforeEach(async () => {

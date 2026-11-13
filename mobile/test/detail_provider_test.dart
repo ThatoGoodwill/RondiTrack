@@ -4,16 +4,29 @@ import 'package:ronditrack_mobile/features/home/data/fake_home_repository.dart';
 import 'package:ronditrack_mobile/features/home/presentation/providers.dart';
 
 void main() {
-  test('family keys keep separate stokvels and refuse a missing membership', () async {
+  test('the family isolates identities, and missing stokvels have one error', () async {
     final container = ProviderContainer(
+      retry: (count, error) => null,
       overrides: [homeRepositoryProvider.overrideWithValue(
         const FakeHomeRepository(delay: Duration.zero))],
     );
     addTearDown(container.dispose);
-    final a = await container.read(stokvelDetailsProvider('ubuntu').future);
-    final b = await container.read(stokvelDetailsProvider('grocery').future);
-    expect(a.home.name, 'Ubuntu Savers');
-    expect(b.home.name, 'Umoja Grocery Club');
-    await expectLater(container.read(stokvelDetailsProvider('wrong').future), throwsException);
+    // autoDispose providers need an active subscriber while the future resolves.
+    final ubuntu = stokvelDetailsProvider('ubuntu');
+    final grocery = stokvelDetailsProvider('grocery');
+    final wrong = stokvelDetailsProvider('wrong');
+    final subscriptions = [
+      container.listen(ubuntu, (_, _) {}),
+      container.listen(grocery, (_, _) {}),
+      container.listen(wrong, (_, _) {}),
+    ];
+    addTearDown(() {
+      for (final subscription in subscriptions) { subscription.close(); }
+    });
+    final first = await container.read(ubuntu.future);
+    final second = await container.read(grocery.future);
+    expect(first.home.name, 'Ubuntu Savers');
+    expect(second.home.name, 'Umoja Grocery Club');
+    await expectLater(container.read(wrong.future), throwsA(isA<StokvelNotFound>()));
   });
 }

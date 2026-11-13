@@ -6,7 +6,7 @@ describe('exact rands and cents conversion', () => {
     expect(parseRandsToCents('150.5')).toBe(15050)
     expect(parseRandsToCents('19.99')).toBe(1999)
     expect(() => parseRandsToCents('150.505')).toThrow()
-    expect(() => parseRandsToCents('1 500,50')).toThrow()
+    expect(parseRandsToCents('1 500,50')).toBe(150050) // 9.2 accepts South African grouped input
     expect(() => parseRandsToCents('1e2')).toThrow()
   })
   it('round trips every cent from zero to 100000', () => {
