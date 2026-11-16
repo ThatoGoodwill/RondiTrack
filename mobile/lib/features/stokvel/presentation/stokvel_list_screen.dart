@@ -25,7 +25,7 @@ class StokvelListScreen extends ConsumerWidget {
   final String? selectedId;
   @override Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(memberHomeProvider);
-    Widget list = entries.when(
+    final list = entries.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: TextButton(
         onPressed: () => ref.invalidate(memberHomeProvider), child: const Text('Try again'))),

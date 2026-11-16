@@ -24,13 +24,15 @@ final class StokvelDestination extends AppDestination {
 }
 final class CycleDestination extends AppDestination {
   const CycleDestination(this.stokvelId, this.cycleId);
-  final String stokvelId, cycleId;
+  final String stokvelId;
+  final String cycleId;
   @override String get location =>
     '/stokvels/${Uri.encodeComponent(stokvelId)}/cycles/${Uri.encodeComponent(cycleId)}';
 }
 final class PayoutDestination extends AppDestination {
   const PayoutDestination(this.stokvelId, this.cycleId);
-  final String stokvelId, cycleId;
+  final String stokvelId;
+  final String cycleId;
   @override String get location =>
     '/stokvels/${Uri.encodeComponent(stokvelId)}/cycles/${Uri.encodeComponent(cycleId)}/payouts';
 }

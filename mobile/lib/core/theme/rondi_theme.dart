@@ -6,8 +6,15 @@ class RondiStatusColors extends ThemeExtension<RondiStatusColors> {
     required this.open, required this.closed, required this.paidOut,
     required this.payoutWaiting, required this.payoutNext, required this.payoutPaid,
     required this.unknown});
-  final Color recorded, arrears, open, closed, paidOut;
-  final Color payoutWaiting, payoutNext, payoutPaid, unknown;
+  final Color recorded;
+  final Color arrears;
+  final Color open;
+  final Color closed;
+  final Color paidOut;
+  final Color payoutWaiting;
+  final Color payoutNext;
+  final Color payoutPaid;
+  final Color unknown;
 
   @override
   RondiStatusColors copyWith({Color? recorded, Color? arrears, Color? open,
@@ -18,7 +25,7 @@ class RondiStatusColors extends ThemeExtension<RondiStatusColors> {
       paidOut: paidOut ?? this.paidOut,
       payoutWaiting: payoutWaiting ?? this.payoutWaiting,
       payoutNext: payoutNext ?? this.payoutNext,
-      payoutPaid: payoutPaid ?? this.paidOut,
+      payoutPaid: payoutPaid ?? this.payoutPaid,
       unknown: unknown ?? this.unknown);
 
   @override

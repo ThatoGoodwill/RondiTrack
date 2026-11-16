@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,10 +22,11 @@ class _AuthNotifier extends ChangeNotifier {
 
 final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
   final refresh = _AuthNotifier();
-  ref.listen(fakeAuthProvider, (_, __) {
+  ref.listen(fakeAuthProvider, (_, _) {
     // A membership or payout cached for the previous identity must never
     // appear under the next user's name, even for a single frame.
     ref.invalidate(memberHomeProvider);
+    // ignore: cascade_invocations
     ref.invalidate(stokvelDetailsProvider);
     ref.invalidate(payoutOrderProvider);
     ref.invalidate(activityFeedProvider);
@@ -41,17 +41,17 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
       rememberedAddress: state.uri.queryParameters['from'],
     ),
     routes: [
-      GoRoute(path: '/sign-in', builder: (_, __) => const SignInScreen()),
+      GoRoute(path: '/sign-in', builder: (_, _) => const SignInScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _AppShell(shell: shell, config: config),
         branches: [
           StatefulShellBranch(routes: [
-            GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
+            GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
             if (config.flavor == 'dev') GoRoute(path: '/dev/personas',
-              builder: (_, __) => const _PersonaDevScreen()),
+              builder: (_, _) => const _PersonaDevScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/stokvels', builder: (_, __) => const StokvelListScreen(), routes: [
+            GoRoute(path: '/stokvels', builder: (_, _) => const StokvelListScreen(), routes: [
               GoRoute(path: ':id', builder: (_, state) =>
                 StokvelScreen(initialId: state.pathParameters['id']!), routes: [
                   GoRoute(path: 'cycles/:cycleId', builder: (_, state) => CycleScreen(
@@ -65,16 +65,16 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
             ]),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/activity', builder: (_, __) => const ActivityScreen()),
+            GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+            GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
           ]),
         ],
       ),
       GoRoute(path: '/join/:code', builder: (_, state) => InviteScreen(code: state.pathParameters['code']!)),
     ],
-    errorBuilder: (_, __) => const Scaffold(body: Center(child: Text('Not found'))),
+    errorBuilder: (_, _) => const Scaffold(body: Center(child: Text('Not found'))),
   );
   ref.onDispose(router.dispose);
   return router;

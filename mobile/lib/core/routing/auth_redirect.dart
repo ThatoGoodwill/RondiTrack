@@ -2,7 +2,7 @@
 /// Only internal destinations may survive the sign-in transition.
 String? safeInternalAddress(String? address) {
   if (address == null || !address.startsWith('/') || address.startsWith('//') ||
-      address.contains('\\') || address.contains('://')) return null;
+      address.contains(String.fromCharCode(92)) || address.contains('://')) return null;
   final uri = Uri.tryParse(address);
   if (uri == null || uri.hasAuthority || uri.scheme.isNotEmpty ||
       uri.path == '/sign-in') return null;

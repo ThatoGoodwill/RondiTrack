@@ -12,7 +12,8 @@ import 'providers.dart';
 
 class PayoutScreen extends ConsumerWidget {
   const PayoutScreen({required this.stokvelId, required this.cycleId, super.key});
-  final String stokvelId, cycleId;
+  final String stokvelId;
+  final String cycleId;
   @override Widget build(BuildContext context, WidgetRef ref) {
     final details = ref.watch(stokvelDetailsProvider(stokvelId));
     final payout = ref.watch(payoutOrderProvider((stokvelId, cycleId)));
