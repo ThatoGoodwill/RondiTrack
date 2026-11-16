@@ -21,9 +21,7 @@ void main() {
       homeRepositoryProvider.overrideWithValue(const FakeHomeRepository(delay: Duration.zero)),
     ]);
     addTearDown(container.dispose);
-    final router = container.read(appRouterProvider(prod));
-    // Reuse the previously created router instance.
-    router.go('/join/HELLO');
+    container.read(appRouterProvider(prod)).go('/join/HELLO');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
     await tester.pumpAndSettle();
@@ -39,9 +37,7 @@ void main() {
       homeRepositoryProvider.overrideWithValue(const FakeHomeRepository(delay: Duration.zero)),
     ]);
     addTearDown(container.dispose);
-    final router = container.read(appRouterProvider(prod));
-    // Reuse the previously created router instance.
-    router.go('/stokvels/unknown');
+    container.read(appRouterProvider(prod)).go('/stokvels/unknown');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
     await tester.pumpAndSettle();
@@ -53,9 +49,7 @@ void main() {
       fakeAuthProvider.overrideWith(SignedInPersona.new),
     ]);
     addTearDown(container.dispose);
-    final router = container.read(appRouterProvider(prod));
-    // Reuse the previously created router instance.
-    router.go('/dev/personas');
+    container.read(appRouterProvider(prod)).go('/dev/personas');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
     await tester.pumpAndSettle();
