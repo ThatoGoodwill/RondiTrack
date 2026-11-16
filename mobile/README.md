@@ -83,3 +83,33 @@ This branch is a proposed implementation for Week 10 Day 3. Do not mark the assi
 **Tests:** `auth_redirect_test.dart` and `router_test.dart` exercise redirect, privacy and prod-only route absence, but full four-tab stack preservation, cold-start route, layouts at 360dp/200%, tablet and Android screenshots/recordings still need verification. Check the PR's Actions tab for the current outcome.
 
 **Required commands in `mobile/`:** `flutter create . --platforms android,ios`, `flutter pub get`, `dart run build_runner build`, `dart format --output=none --set-exit-if-changed lib test`, `dart analyze --fatal-infos`, `flutter test`.
+
+## Assignment 10.3 — payout foundation (draft)
+
+Builds on [Assignment 10.2 PR #12](https://github.com/ThatoGoodwill/RondiTrack/pull/12). The proposed backend contract is a **separate** [API PR #14](https://github.com/ThatoGoodwill/RondiTrack/pull/14); do not merge before financial-rule and database verification.
+
+### Five contract answers
+
+1. Existing API did **not** expose a full cycle payout order. Proposed endpoint: `GET /api/v1/stokvels/{stokvelId}/cycles/{cycleId}/payout/order` with `stokvelId`, `cycleId`, `nextMemberId`, and entries containing `memberId`, `memberName`, `position`, `amountCents`, `status`, `paidOnUtc`.
+2. Proposed payout status strings are exactly `Paid`, `Next`, `Waiting`. Unknown future values are mapped to `PayoutStatus.unknown`.
+3. The proposed API returns `nextMemberId`; Flutter must display it, never calculate it.
+4. A non-member receives `404 Not found`, indistinguishable from a nonexistent stokvel or cycle.
+5. Existing payout POST uses `Policies.StokvelTreasurer`, while the Week 10 fake interface labels the Treasurer action only inside a stokvel with Treasurer membership.
+
+The API commit originally inspected in 10.1 was `6f56cfd4c404aae15643d34a8ea9421ec341e0ab`. This is **not** a claim about the latest API commit. The proposed API change is in PR #14 and must be tested and reflected in regenerated OpenAPI before acceptance.
+
+### Personas and behavior
+
+| Persona | Home | Ubuntu | Mabena Family | Payout view |
+| --- | --- | --- | --- | --- |
+| Lerato | Ubuntu + Mabena | Member | Treasurer | Ubuntu empty; Mabena order + Treasurer label |
+| Sipho | Ubuntu only | Member | Not found | Ubuntu empty; Mabena not found |
+| Nomsa | Empty with next step | Not found | Not found | Not found |
+
+The development-only persona switcher appears only when `AppConfig.flavor == 'dev'`; no switcher route is registered in staging/prod. Switching invalidates Home, details, activity and payouts. This is **not a substitute** for running the requested no-stale-frame test and actual Android demonstrations.
+
+### Architecture and remaining evidence
+
+Payouts use domain models, repository interface, fake data implementation, Riverpod provider keyed by `(stokvelId, cycleId)`, and a themed screen with loading/empty/data/failure and retry. Screen code must not import data implementations, Dio or Drift. The architecture test enforces these restrictions and bans literal widget colours and `Navigator.push`.
+
+**Still outstanding before submission:** generated typed routes in 10.2, complete persona/screen and layout matrix, three deliberately failed tests with red/green evidence, full runtime CI, exact contrast readings on rendered surfaces, screenshots, recordings, documentation of each architecture boundary and one candidate for removal, and independent backend contract validation.

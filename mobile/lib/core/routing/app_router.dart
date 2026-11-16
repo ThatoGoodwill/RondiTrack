@@ -10,6 +10,8 @@ import '../../features/home/presentation/providers.dart';
 import '../../features/stokvel/presentation/stokvel_list_screen.dart';
 import '../../features/stokvel/presentation/stokvel_screen.dart';
 import '../../features/stokvel/presentation/cycle_screen.dart';
+import '../../features/payouts/presentation/providers.dart';
+import '../../features/payouts/presentation/payout_screen.dart';
 import '../../features/shell/presentation/tabs.dart';
 import '../../features/invites/presentation/invite_screen.dart';
 import 'auth_redirect.dart';
@@ -28,6 +30,7 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
     // ignore: cascade_invocations
     ref.invalidate(stokvelDetailsProvider);
     ref.invalidate(activityFeedProvider);
+    ref.invalidate(payoutOrderProvider);
     refresh.refresh();
   });
   ref.onDispose(refresh.dispose);
@@ -54,7 +57,10 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
                 StokvelScreen(initialId: state.pathParameters['id']!), routes: [
                   GoRoute(path: 'cycles/:cycleId', builder: (_, state) => CycleScreen(
                     stokvelId: state.pathParameters['id']!,
-                    cycleId: state.pathParameters['cycleId']!)),
+                    cycleId: state.pathParameters['cycleId']!), routes: [
+                    GoRoute(path: 'payouts', builder: (_, state) => PayoutScreen(
+                      stokvelId: state.pathParameters['id']!, cycleId: state.pathParameters['cycleId']!)),
+                  ]),
                 ]),
             ]),
           ]),
