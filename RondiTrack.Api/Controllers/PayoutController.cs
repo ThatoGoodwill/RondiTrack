@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RondiTrack.Api.Authorization;
@@ -16,6 +16,57 @@ namespace RondiTrack.Api.Controllers;
 [Route(ApiRoutes.Base + "/stokvels/{stokvelId:guid}/cycles/{cycleId:guid}/payout")]
 public class PayoutsController(IPayoutService payoutService) : ApiControllerBase
 {
+    // Mobile 10.3: a read-only server-owned rotation. Never let Flutter work
+    // out payment order, amount, statuses or next recipient itself.
+    [HttpGet("order")]
+    [StokvelAccess(Policies.StokvelMember)]
+    [EndpointSummary("Get a cycle's rotation and payout order")]
+    [ProducesResponseType<PayoutOrderResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PayoutOrderResponse>> GetOrder(
+        Guid stokvelId, Guid cycleId, [FromServices] RondiTrackDbContext context, CancellationToken ct)
+    {
+        // The same 404 for nonexistent and non-member resources is enforced by
+        // the StokvelAccess policy before querying data.
+        var cycle = await context.ContributionCycles.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cycleId && c.StokvelId == stokvelId, ct)
+            ?? throw new NotFoundException("cycle.not_found", "Not found");
+
+        var members = await context.StokvelMembers.AsNoTracking()
+            .Where(m => m.StokvelId == stokvelId)
+            .OrderBy(m => m.JoinedAtUtc).ThenBy(m => m.UserId)
+            .ToListAsync(ct);
+        var ids = members.Select(m => m.UserId).ToArray();
+        var names = await context.Users.AsNoTracking()
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.FirstName, u.LastName })
+            .ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct);
+        var allPayouts = await context.Payouts.AsNoTracking()
+            .Where(p => p.StokvelId == stokvelId)
+            .OrderBy(p => p.ProcessedAt)
+            .ToListAsync(ct);
+        var processedByMember = allPayouts
+            .GroupBy(p => p.RecipientUserId)
+            .ToDictionary(group => group.Key, group => group.First());
+        var nextMemberId = members.Select(m => (Guid?)m.UserId)
+            .FirstOrDefault(id => id.HasValue && !processedByMember.ContainsKey(id.Value));
+        // This is a server decision and uses integer cents in the DTO.
+        var pot = await context.Contributions.AsNoTracking()
+            .Where(c => c.StokvelId == stokvelId && c.ContributionCycleId == cycle.Id)
+            .SumAsync(c => (decimal?)c.Amount, ct) ?? 0m;
+        var amountCents = decimal.ToInt64(decimal.Round(pot * 100m, 0));
+        var entries = members.Select((member, index) =>
+        {
+            var hasPayout = processedByMember.TryGetValue(member.UserId, out var payout);
+            var status = hasPayout ? "Paid" : nextMemberId == member.UserId ? "Next" : "Waiting";
+            return new PayoutOrderEntryResponse(
+                member.UserId, names.GetValueOrDefault(member.UserId, "Member"),
+                index + 1, hasPayout ? decimal.ToInt64(decimal.Round(payout!.Amount * 100m, 0)) : amountCents,
+                status, hasPayout ? payout!.ProcessedAt : null);
+        }).ToList();
+        return Ok(new PayoutOrderResponse(stokvelId, cycleId, nextMemberId, entries));
+    }
+
     [HttpPost]
     [EnableRateLimiting(RateLimitPolicies.Payouts)]
     [StokvelAccess(Policies.StokvelTreasurer)]   // treasurer or chairperson only
