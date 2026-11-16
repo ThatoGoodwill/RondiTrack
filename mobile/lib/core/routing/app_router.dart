@@ -8,11 +8,9 @@ import '../layout/breakpoints.dart';
 import '../../features/auth/presentation/sign_in_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/home/presentation/providers.dart';
-import '../../features/payouts/presentation/providers.dart';
 import '../../features/stokvel/presentation/stokvel_list_screen.dart';
 import '../../features/stokvel/presentation/stokvel_screen.dart';
 import '../../features/stokvel/presentation/cycle_screen.dart';
-import '../../features/payouts/presentation/payout_screen.dart';
 import '../../features/shell/presentation/tabs.dart';
 import '../../features/invites/presentation/invite_screen.dart';
 import 'auth_redirect.dart';
@@ -28,7 +26,6 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
     // appear under the next user's name, even for a single frame.
     ref.invalidate(memberHomeProvider);
     ref.invalidate(stokvelDetailsProvider);
-    ref.invalidate(payoutOrderProvider);
     ref.invalidate(activityFeedProvider);
     refresh.refresh();
   });
@@ -56,11 +53,7 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
                 StokvelScreen(initialId: state.pathParameters['id']!), routes: [
                   GoRoute(path: 'cycles/:cycleId', builder: (_, state) => CycleScreen(
                     stokvelId: state.pathParameters['id']!,
-                    cycleId: state.pathParameters['cycleId']!), routes: [
-                      GoRoute(path: 'payouts', builder: (_, state) => PayoutScreen(
-                        stokvelId: state.pathParameters['id']!,
-                        cycleId: state.pathParameters['cycleId']!)),
-                    ]),
+                    cycleId: state.pathParameters['cycleId']!)),
                 ]),
             ]),
           ]),
