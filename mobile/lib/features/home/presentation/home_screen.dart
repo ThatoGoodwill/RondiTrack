@@ -18,7 +18,7 @@ class HomeScreen extends ConsumerWidget {
         data: (entries) => entries.isEmpty
           ? const Center(child: Padding(padding: EdgeInsets.all(20),
             child: Text('You do not belong to any stokvels yet. Ask for an invite.')))
-          : RefreshIndicator(onRefresh: () => ref.refresh(memberHomeProvider.future).then<void>((_) {}),,
+          : RefreshIndicator(onRefresh: () => ref.refresh(memberHomeProvider.future).then<void>((_) {}),
             child: ListView.builder(key: const Key('home-list'), itemCount: entries.length,
               itemBuilder: (context, i) => _card(context, entries[i])))));
   }
