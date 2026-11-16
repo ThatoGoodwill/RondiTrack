@@ -1,3 +1,4 @@
+import '../domain/not_found.dart';
 import '../../../core/money/cents.dart';
 import '../../stokvel/domain/statuses.dart';
 import '../domain/home_repository.dart';
@@ -21,30 +22,21 @@ class FakeHomeRepository implements HomeRepository {
     ),
     nextPayoutDueUtc: DateTime.utc(2026, 11, 30, 22),
   );
-  static final grocery = HomeEntry(
-    membership: const Membership(stokvelId: 'grocery', role: StokvelRole.treasurer),
-    name: 'Umoja Grocery Club', arrearsCents: const Cents(0),
+  static final mabena = HomeEntry(
+    membership: const Membership(stokvelId: 'mabena', role: StokvelRole.treasurer),
+    name: 'Mabena Family', arrearsCents: const Cents(0),
     currentCycle: const CurrentCycle(
-      id: 'grocery-cycle', label: '2026-11', status: CycleStatus.open,
+      id: 'mabena-cycle', label: '2026-11', status: CycleStatus.open,
       paidCents: Cents(35050), owedCents: Cents(0), endsOnDate: '2026-11-30',
     ),
   );
-  static final friday = HomeEntry(
-    membership: const Membership(stokvelId: 'friday', role: StokvelRole.admin),
-    name: 'Friday Rotation', arrearsCents: const Cents(0),
-    currentCycle: const CurrentCycle(
-      id: 'friday-cycle', label: '2026-W46', status: CycleStatus.closed,
-      paidCents: Cents(10000), owedCents: Cents(0), endsOnDate: '2026-11-15',
-    ),
-  );
-
   @override
   Future<List<HomeEntry>> loadHome(String persona) async {
     await _latency();
     return switch (persona) {
-      'lerato' => [ubuntu, grocery],
-      'sipho' => [friday, HomeEntry(
-        membership: const Membership(stokvelId: 'ubuntu', role: StokvelRole.treasurer),
+      'lerato' => [ubuntu, mabena],
+      'sipho' => [HomeEntry(
+        membership: const Membership(stokvelId: 'ubuntu', role: StokvelRole.member),
         name: 'Ubuntu Savers', arrearsCents: const Cents(0),
         currentCycle: const CurrentCycle(
           id: 'ubuntu-cycle', label: '2026-11', status: CycleStatus.open,
@@ -73,10 +65,4 @@ class FakeHomeRepository implements HomeRepository {
       ],
     );
   }
-}
-
-final class StokvelNotFound implements Exception {
-  const StokvelNotFound();
-  @override
-  String toString() => 'We could not find this stokvel';
 }
