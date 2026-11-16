@@ -24,7 +24,6 @@ class CycleScreen extends ConsumerWidget {
             ListTile(title: const Text('Paid'), subtitle: Text(cycle.paidCents.formatZa())),
             ListTile(title: const Text('Owed'), subtitle: Text(cycle.owedCents.formatZa())),
             ListTile(title: const Text('Rotation and payouts'),
-              trailing: const Icon(Icons.chevron_right),
               onTap: () => PayoutDestination(stokvelId, cycleId).go(context)),
           ]);
         }));
