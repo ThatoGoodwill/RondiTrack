@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/app/ronditrack_app.dart';
@@ -21,6 +22,7 @@ void main() {
     ]);
     addTearDown(container.dispose);
     final router = container.read(appRouterProvider(prod));
+    // Reuse the previously created router instance.
     router.go('/join/HELLO');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
@@ -38,6 +40,7 @@ void main() {
     ]);
     addTearDown(container.dispose);
     final router = container.read(appRouterProvider(prod));
+    // Reuse the previously created router instance.
     router.go('/stokvels/unknown');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
@@ -51,6 +54,7 @@ void main() {
     ]);
     addTearDown(container.dispose);
     final router = container.read(appRouterProvider(prod));
+    // Reuse the previously created router instance.
     router.go('/dev/personas');
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
