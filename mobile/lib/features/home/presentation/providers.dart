@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/auth/auth_state.dart';
 import '../data/fake_home_repository.dart';
 import '../domain/home_repository.dart';
 import '../domain/models.dart';
@@ -21,7 +22,7 @@ final selectedPersonaProvider = NotifierProvider<SelectedPersona, String>(
 class MemberHome extends AsyncNotifier<List<HomeEntry>> {
   @override
   Future<List<HomeEntry>> build() async {
-    final persona = ref.watch(selectedPersonaProvider);
+    final persona = ref.watch(fakeAuthProvider) ?? 'lerato';
     return ref.watch(homeRepositoryProvider).loadHome(persona);
   }
   Future<void> reload() async {
@@ -35,7 +36,14 @@ final memberHomeProvider = AsyncNotifierProvider.autoDispose<MemberHome, List<Ho
 
 final stokvelDetailsProvider = FutureProvider.autoDispose.family<StokvelDetails, String>(
   (ref, id) async {
-    final persona = ref.watch(selectedPersonaProvider);
+    final persona = ref.watch(fakeAuthProvider) ?? 'lerato';
     return ref.watch(homeRepositoryProvider).loadDetail(persona, id);
   },
 );
+
+final activityFeedProvider = FutureProvider.autoDispose<List<String>>((ref) async {
+  final persona = ref.watch(fakeAuthProvider);
+  if (persona == null) return [];
+  final home = await ref.watch(memberHomeProvider.future);
+  return home.map((e) => '${e.name}: ${e.currentCycle?.status.label ?? "No active cycle"}').toList();
+});

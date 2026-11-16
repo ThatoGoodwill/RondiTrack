@@ -1,3 +1,4 @@
+import 'package:ronditrack_mobile/features/home/domain/not_found.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/features/home/data/fake_home_repository.dart';
@@ -13,7 +14,7 @@ void main() {
     addTearDown(container.dispose);
     // autoDispose providers need an active subscriber while the future resolves.
     final ubuntu = stokvelDetailsProvider('ubuntu');
-    final grocery = stokvelDetailsProvider('grocery');
+    final grocery = stokvelDetailsProvider('mabena');
     final wrong = stokvelDetailsProvider('wrong');
     final subscriptions = [
       container.listen(ubuntu, (_, _) {}),
@@ -26,7 +27,7 @@ void main() {
     final first = await container.read(ubuntu.future);
     final second = await container.read(grocery.future);
     expect(first.home.name, 'Ubuntu Savers');
-    expect(second.home.name, 'Umoja Grocery Club');
+    expect(second.home.name, 'Mabena Family');
     await expectLater(container.read(wrong.future), throwsA(isA<StokvelNotFound>()));
   });
 }

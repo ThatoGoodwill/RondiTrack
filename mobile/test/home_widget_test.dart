@@ -5,7 +5,13 @@ import 'package:ronditrack_mobile/features/home/data/fake_home_repository.dart';
 import 'package:ronditrack_mobile/features/home/domain/home_repository.dart';
 import 'package:ronditrack_mobile/features/home/domain/models.dart';
 import 'package:ronditrack_mobile/features/home/presentation/home_screen.dart';
+import 'package:ronditrack_mobile/core/auth/auth_state.dart';
 import 'package:ronditrack_mobile/features/home/presentation/providers.dart';
+
+class NomsaAuth extends FakeAuth {
+  @override
+  String? build() => 'nomsa';
+}
 
 class FailingHomeRepository implements HomeRepository {
   @override
@@ -24,18 +30,17 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Ubuntu Savers'), findsOneWidget);
-    expect(find.text('Umoja Grocery Club'), findsOneWidget);
+    expect(find.text('Mabena Family'), findsOneWidget);
   });
   testWidgets('home empty is an explanation rather than an error', (tester) async {
     await tester.pumpWidget(ProviderScope(
-      overrides: [homeRepositoryProvider.overrideWithValue(
-        const FakeHomeRepository(delay: Duration.zero))],
+      overrides: [
+        homeRepositoryProvider.overrideWithValue(
+          const FakeHomeRepository(delay: Duration.zero)),
+        fakeAuthProvider.overrideWith(NomsaAuth.new),
+      ],
       child: const MaterialApp(home: HomeScreen()),
     ));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('persona-picker')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Nomsa').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('do not belong to any stokvels'), findsOneWidget);
   });
