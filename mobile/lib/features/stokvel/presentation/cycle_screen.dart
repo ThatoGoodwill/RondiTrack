@@ -7,7 +7,8 @@ import '../../home/domain/not_found.dart';
 
 class CycleScreen extends ConsumerWidget {
   const CycleScreen({required this.stokvelId, required this.cycleId, super.key});
-  final String stokvelId, cycleId;
+  final String stokvelId;
+  final String cycleId;
   @override Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(stokvelDetailsProvider(stokvelId));
     return Scaffold(appBar: AppBar(title: const Text('Cycle'), leading: BackButton(

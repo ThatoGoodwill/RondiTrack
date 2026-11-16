@@ -22,7 +22,7 @@ final selectedPersonaProvider = NotifierProvider<SelectedPersona, String>(
 class MemberHome extends AsyncNotifier<List<HomeEntry>> {
   @override
   Future<List<HomeEntry>> build() async {
-    final persona = ref.watch(fakeAuthProvider) ?? ref.watch(selectedPersonaProvider);
+    final String persona = ref.watch(fakeAuthProvider) ?? 'lerato';
     return ref.watch(homeRepositoryProvider).loadHome(persona);
   }
   Future<void> reload() async {
@@ -36,7 +36,7 @@ final memberHomeProvider = AsyncNotifierProvider.autoDispose<MemberHome, List<Ho
 
 final stokvelDetailsProvider = FutureProvider.autoDispose.family<StokvelDetails, String>(
   (ref, id) async {
-    final persona = ref.watch(fakeAuthProvider) ?? ref.watch(selectedPersonaProvider);
+    final String persona = ref.watch(fakeAuthProvider) ?? 'lerato';
     return ref.watch(homeRepositoryProvider).loadDetail(persona, id);
   },
 );
