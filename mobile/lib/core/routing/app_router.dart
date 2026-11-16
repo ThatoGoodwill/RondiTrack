@@ -24,6 +24,7 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
     // A membership or payout cached for the previous identity must never
     // appear under the next user's name, even for a single frame.
     ref.invalidate(memberHomeProvider);
+    // These invalidations target independent providers and must happen together.
     // ignore: cascade_invocations
     ref.invalidate(stokvelDetailsProvider);
     ref.invalidate(activityFeedProvider);
