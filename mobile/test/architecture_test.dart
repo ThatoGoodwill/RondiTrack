@@ -8,7 +8,7 @@ void main() {
         file.path.replaceAll('\\', '/').contains('/presentation/'));
     for (final file in Directory('lib/features').listSync(recursive: true)
         .whereType<File>().where((f) => f.path.endsWith('.dart'))) {
-      final path = file.path.replaceAll('\\\\', '/');
+      final path = file.path.replaceAll('\\', '/');
       if (path.contains('/presentation/') || path.contains('/domain/')) {
         final source = file.readAsStringSync();
         expect(source.contains('package:dio/'), isFalse, reason: path);

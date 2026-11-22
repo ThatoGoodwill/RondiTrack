@@ -35,7 +35,8 @@ void main() {
         Future<int>.value(1),
       ).wait;
       fail('Expected the record wait to throw');
-    } on ParallelWaitError catch (error) {
+    } on Object catch (error) {
+      expect(error, isA<ParallelWaitError<dynamic, dynamic>>());
       expect(mapFailure(error), isA<NotFoundFailure>());
     }
   });

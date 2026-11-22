@@ -9,8 +9,8 @@ Failure mapFailure(Object error) {
   if (error is ParallelWaitError) {
     final errors = error.errors;
     if (errors case (final left, final right)) {
-      final values = <Object>[if (left != null) left, if (right != null) right];
-      final failures = values.map((item) => mapFailure(
+      final values = <Object?>[left, right];
+      final failures = values.whereType<Object>().map((item) => mapFailure(
         item is AsyncError ? item.error : item)).toList();
       for (final failure in failures) {
         if (failure is NotFoundFailure) return failure;
