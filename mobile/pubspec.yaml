@@ -1,5 +1,5 @@
 name: ronditrack_mobile
-description: RondiTrack mobile foundations for Week 10 (no live API calls yet)
+description: RondiTrack mobile client
 publish_to: none
 version: 0.1.0+1
 
@@ -13,6 +13,9 @@ dependencies:
   riverpod_annotation: 4.0.7
   freezed_annotation: 3.1.0
   go_router: 18.1.1
+  dio: 5.11.1
+  retrofit: 4.10.0
+  json_annotation: 4.12.0
 
 dev_dependencies:
   flutter_test:
@@ -23,6 +26,9 @@ dev_dependencies:
   freezed: 4.0.3
   build_runner: 2.16.2
   go_router_builder: 4.5.2
+  json_serializable: 6.15.2
+  retrofit_generator: 10.3.3
+  swagger_parser: 1.45.1
 
 flutter:
   uses-material-design: true
