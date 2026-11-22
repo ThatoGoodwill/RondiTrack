@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/features/auth/data/auth_api.dart';
 import 'package:ronditrack_mobile/features/home/data/api_home_repository.dart';
-import 'package:ronditrack_mobile/core/network/failure.dart';
+import 'package:ronditrack_mobile/features/home/domain/models.dart';
 
 const baseUrl = String.fromEnvironment('liveApiBaseUrl');
 const password = String.fromEnvironment('seedPassword');
@@ -18,7 +18,7 @@ void main() {
           ? 'Requires a fresh seeded API and runtime login defines.'
           : false,
       () async {
-    Future<(Dio, List<dynamic>)> loginAndHome(String email) async {
+    Future<(Dio, List<HomeEntry>)> loginAndHome(String email) async {
       final dio = Dio(BaseOptions(baseUrl: baseUrl));
       final token = await AuthApi(dio).login(email, password);
       dio.options.headers['Authorization'] = 'Bearer ${token.token}';
@@ -35,10 +35,8 @@ void main() {
     expect(nomsaHome, isEmpty);
 
     // Use the actual seed IDs returned by API rather than hard-coding GUIDs.
-    final leratoIds = leratoHome.cast<dynamic>()
-        .map((e) => e.membership.stokvelId as String).toSet();
-    final siphoIds = siphoHome.cast<dynamic>()
-        .map((e) => e.membership.stokvelId as String).toSet();
+    final leratoIds = leratoHome.map((e) => e.membership.stokvelId).toSet();
+    final siphoIds = siphoHome.map((e) => e.membership.stokvelId).toSet();
     final privateIds = leratoIds.difference(siphoIds);
     if (privateIds.isNotEmpty) {
       final id = privateIds.first;
@@ -52,6 +50,6 @@ void main() {
     expect(stranger.statusCode, 404);
     // The real 403 test requires a seeded member-only cycle; it is recorded
     // in the PR separately rather than issuing a real money write blindly.
-    expect(leratoHome, isNot(isA<Failure>()));
+    expect(leratoHome, isNotEmpty);
   });
 }
