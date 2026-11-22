@@ -28,7 +28,7 @@ final class ForbiddenFailure extends Failure {
   String get message => 'You do not have permission to do that.';
 }
 
-final class NotFoundFailure extends Failure {
+base class NotFoundFailure extends Failure {
   const NotFoundFailure({super.reference});
   @override
   String get message => 'Not found';
