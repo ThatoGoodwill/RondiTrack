@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// A fake login for the Week 10 shell; production authentication is Week 11.
+/// Kept as the navigation identity; Week 11 obtains a real API access token.
 class FakeAuth extends Notifier<String?> {
   @override
   String? build() => null;
 
   void signIn(String persona) {
-    if (!const {'lerato', 'sipho', 'nomsa'}.contains(persona)) {
+    if (!const {'lerato', 'sipho', 'nomsa', 'authenticated'}.contains(persona)) {
       throw ArgumentError.value(persona, 'persona');
     }
     state = persona;
