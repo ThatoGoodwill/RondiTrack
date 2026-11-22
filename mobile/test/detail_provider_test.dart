@@ -1,14 +1,21 @@
 import 'package:ronditrack_mobile/features/home/domain/not_found.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:ronditrack_mobile/core/auth/auth_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/features/home/data/fake_home_repository.dart';
 import 'package:ronditrack_mobile/features/home/presentation/providers.dart';
+
+class LeratoAuth extends FakeAuth {
+  @override
+  String? build() => 'lerato';
+}
 
 void main() {
   test('the family isolates identities, and missing stokvels have one error', () async {
     final container = ProviderContainer(
       retry: (count, error) => null,
-      overrides: [homeRepositoryProvider.overrideWithValue(
+      overrides: [fakeAuthProvider.overrideWith(LeratoAuth.new),
+      homeRepositoryProvider.overrideWithValue(
         const FakeHomeRepository(delay: Duration.zero))],
     );
     addTearDown(container.dispose);

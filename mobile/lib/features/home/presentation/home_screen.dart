@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/money/cents.dart';
+import '../../../core/widgets/failure_message.dart';
 import '../../../core/routing/routes.dart';
 import '../domain/models.dart';
 import 'providers.dart';
@@ -12,9 +13,8 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(appBar: AppBar(title: const Text('RondiTrack')),
       body: home.when(
         loading: () => const Center(child: CircularProgressIndicator(key: Key('home-loading'))),
-        error: (e, _) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Could not load your stokvels'),
-          TextButton(onPressed: () => ref.invalidate(memberHomeProvider), child: const Text('Try again'))])),
+        error: (e, _) => FailureMessage(error: e,
+          retry: () => ref.invalidate(memberHomeProvider)),
         data: (entries) => entries.isEmpty
           ? const Center(child: Padding(padding: EdgeInsets.all(20),
             child: Text('You do not belong to any stokvels yet. Ask for an invite.')))

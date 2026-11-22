@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/money/cents.dart';
 import '../../home/presentation/providers.dart';
-import '../../home/domain/not_found.dart';
+import '../../../core/widgets/failure_message.dart';
 
 class CycleScreen extends ConsumerWidget {
   const CycleScreen({required this.stokvelId, required this.cycleId, super.key});
@@ -15,7 +15,8 @@ class CycleScreen extends ConsumerWidget {
       onPressed: () => StokvelDestination(stokvelId).go(context))),
       body: detail.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text(error is StokvelNotFound ? 'Not found' : 'Could not load cycle')),
+        error: (error, _) => FailureMessage(error: error,
+          retry: () => ref.invalidate(stokvelDetailsProvider(stokvelId))),
         data: (data) {
           final cycle = data.home.currentCycle;
           if (cycle == null || cycle.id != cycleId) return const Center(child: Text('Not found'));

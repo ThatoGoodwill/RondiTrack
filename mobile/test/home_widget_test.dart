@@ -8,6 +8,11 @@ import 'package:ronditrack_mobile/features/home/presentation/home_screen.dart';
 import 'package:ronditrack_mobile/core/auth/auth_state.dart';
 import 'package:ronditrack_mobile/features/home/presentation/providers.dart';
 
+class LeratoAuth extends FakeAuth {
+  @override
+  String? build() => 'lerato';
+}
+
 class NomsaAuth extends FakeAuth {
   @override
   String? build() => 'nomsa';
@@ -24,7 +29,8 @@ class FailingHomeRepository implements HomeRepository {
 void main() {
   testWidgets('home renders cards for a member who is treasurer elsewhere', (tester) async {
     await tester.pumpWidget(ProviderScope(
-      overrides: [homeRepositoryProvider.overrideWithValue(
+      overrides: [fakeAuthProvider.overrideWith(LeratoAuth.new),
+        homeRepositoryProvider.overrideWithValue(
         const FakeHomeRepository(delay: Duration.zero))],
       child: const MaterialApp(home: HomeScreen()),
     ));
@@ -47,7 +53,8 @@ void main() {
   testWidgets('a repository failure offers retry', (tester) async {
     await tester.pumpWidget(ProviderScope(
       retry: (count, error) => null,
-      overrides: [homeRepositoryProvider.overrideWithValue(FailingHomeRepository())],
+      overrides: [fakeAuthProvider.overrideWith(LeratoAuth.new),
+        homeRepositoryProvider.overrideWithValue(FailingHomeRepository())],
       child: const MaterialApp(home: HomeScreen()),
     ));
     await tester.pumpAndSettle();

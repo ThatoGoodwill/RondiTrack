@@ -4,7 +4,8 @@ import '../../../core/money/cents.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/rondi_theme.dart';
 import '../../home/presentation/providers.dart';
-import '../../home/domain/not_found.dart';
+import '../../../core/widgets/failure_message.dart';
+import '../../../core/network/failure.dart';
 import '../../home/presentation/view_state.dart';
 import '../../stokvel/domain/statuses.dart';
 import '../domain/payout_models.dart';
@@ -21,17 +22,15 @@ class PayoutScreen extends ConsumerWidget {
       leading: BackButton(onPressed: () => CycleDestination(stokvelId, cycleId).go(context))),
       body: details.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e is StokvelNotFound ? 'Not found' : 'Could not load stokvel')),
+        error: (e, _) => FailureMessage(error: e,
+          retry: () => ref.invalidate(stokvelDetailsProvider(stokvelId))),
         data: (detail) {
           if (detail.home.currentCycle?.id != cycleId) return const Center(child: Text('Not found'));
           return switch (payoutViewState(payout)) {
             ViewLoading() => const Center(child: CircularProgressIndicator()),
             ViewEmpty() => const Center(child: Text('No payout order has been set for this cycle yet.')),
-            ViewFailure(:final message) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(message),
-              if (message != 'Not found') TextButton(
-                onPressed: () => ref.invalidate(payoutOrderProvider((stokvelId, cycleId))),
-                child: const Text('Try again'))])),
+            ViewFailure() => FailureMessage(error: payout.error ?? const UnexpectedFailure(),
+              retry: () => ref.invalidate(payoutOrderProvider((stokvelId, cycleId)))),
             ViewData(:final value) => ListView(children: [
               for (final e in value.entries) _PayoutTile(entry: e,
                 isNext: value.nextMemberId == e.memberId),

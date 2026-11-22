@@ -1104,8 +1104,8 @@
           "required": true
         },
         "responses": {
-          "201": {
-            "description": "Created",
+          "200": {
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1124,8 +1124,8 @@
               }
             }
           },
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2380,6 +2380,103 @@
           }
         }
       }
+    },
+    "/api/v1/stokvels/{stokvelId}/cycles/{cycleId}/payout/order": {
+      "get": {
+        "tags": [
+          "Payouts"
+        ],
+        "summary": "Get a cycle's rotation and payout order",
+        "parameters": [
+          {
+            "name": "stokvelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cycleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutOrderResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activity": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "summary": "Newest activity from the caller's stokvels, paged",
+        "parameters": [
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageResponseOfActivityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2508,13 +2605,15 @@
         }
       },
       "HomeCycleResponse": {
+        "type": "object",
         "required": [
           "id",
           "label",
           "paidCents",
-          "owedCents"
+          "owedCents",
+          "status",
+          "endsOn"
         ],
-        "type": "object",
         "properties": {
           "id": {
             "type": "string",
@@ -2530,6 +2629,16 @@
           "owedCents": {
             "type": "integer",
             "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "endsOn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -2548,14 +2657,15 @@
         }
       },
       "HomeStokvelResponse": {
+        "type": "object",
         "required": [
           "stokvelId",
           "name",
           "role",
           "currentCycle",
+          "arrearsCents",
           "nextPayoutDueUtc"
         ],
-        "type": "object",
         "properties": {
           "stokvelId": {
             "type": "string",
@@ -2576,6 +2686,10 @@
                 "$ref": "#/components/schemas/HomeCycleResponse"
               }
             ]
+          },
+          "arrearsCents": {
+            "type": "integer",
+            "format": "int64"
           },
           "nextPayoutDueUtc": {
             "type": [
@@ -2745,6 +2859,18 @@
               "null",
               "string"
             ]
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -2928,6 +3054,135 @@
             "format": "date"
           }
         }
+      },
+      "PayoutOrderEntryResponse": {
+        "type": "object",
+        "required": [
+          "memberId",
+          "memberName",
+          "position",
+          "amountCents",
+          "status",
+          "paidOnUtc"
+        ],
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "amountCents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "paidOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PayoutOrderResponse": {
+        "type": "object",
+        "required": [
+          "stokvelId",
+          "cycleId",
+          "nextMemberId",
+          "entries"
+        ],
+        "properties": {
+          "stokvelId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cycleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nextMemberId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayoutOrderEntryResponse"
+            }
+          }
+        }
+      },
+      "ActivityResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "stokvelId",
+          "kind",
+          "occurredAt",
+          "amountCents",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stokvelId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amountCents": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "PageResponseOfActivityResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextPageToken"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityResponse"
+            }
+          },
+          "nextPageToken": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -2941,7 +3196,7 @@
   },
   "security": [
     {
-      "Bearer": [ ]
+      "Bearer": []
     }
   ],
   "tags": [

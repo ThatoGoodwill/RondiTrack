@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/app/ronditrack_app.dart';
@@ -25,8 +24,8 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container, child: RondiTrackApp(config: prod)));
     await tester.pumpAndSettle();
-    expect(find.text('RondiTrack sign in'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('sign-in-lerato')));
+    expect(find.text('Sign in to RondiTrack'), findsOneWidget);
+    container.read(fakeAuthProvider.notifier).signIn('lerato');
     await tester.pumpAndSettle();
     expect(find.text('Invite code: HELLO'), findsOneWidget);
   });

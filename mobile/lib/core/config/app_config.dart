@@ -18,9 +18,12 @@ class AppConfig {
       throw StateError('Native flavor does not match the config flavor.');
     }
     final uri = Uri.tryParse(apiBaseUrl);
-    if (uri == null || !uri.hasScheme ||
+    if (uri == null || uri.host.isEmpty ||
         !(uri.scheme == 'http' || uri.scheme == 'https')) {
       throw StateError('apiBaseUrl must be an HTTP(S) URL.');
+    }
+    if (flavor != 'dev' && uri.scheme != 'https') {
+      throw StateError('Staging and production require HTTPS.');
     }
     return AppConfig(flavor: flavor, apiBaseUrl: uri);
   }
