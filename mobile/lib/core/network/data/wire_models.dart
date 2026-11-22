@@ -50,6 +50,7 @@ abstract class ContributionWire with _$ContributionWire {
   const factory ContributionWire({
     required String id,
     required String userId,
+    required String stokvelId,
     required String contributionCycleId,
     required num amount,
     required String recordedAt,

@@ -32,5 +32,6 @@ jobs:
       # Draft bootstrap. Replace with --set-exit-if-changed after committing formatted files.
       - run: dart format lib test
       - run: dart run build_runner build
+      - run: python3 tool/check_contract.py
       - run: dart analyze --fatal-infos
       - run: flutter test
