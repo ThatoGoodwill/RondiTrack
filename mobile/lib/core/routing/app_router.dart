@@ -28,6 +28,8 @@ final appRouterProvider = Provider.family<GoRouter, AppConfig>((ref, config) {
   ref.listen(fakeAuthProvider, (_, next) {
     // Switching identities clears every per-person read cache.
     ref.invalidate(memberHomeProvider);
+    // Separate dependencies are invalidated as independent operations.
+    // ignore: cascade_invocations
     ref.invalidate(stokvelDetailsProvider);
     ref.invalidate(activityFeedProvider);
     ref.invalidate(payoutOrderProvider);
@@ -158,7 +160,7 @@ class _PersonaDevScreenState extends ConsumerState<_PersonaDevScreen> {
   Future<void> switchTo(String person) async {
     if (busy) return;
     setState(() { busy = true; error = null; });
-    final password = const String.fromEnvironment('seedPassword');
+    const password = String.fromEnvironment('seedPassword');
     final email = _seedEmail(person);
     if (password.isEmpty || email.isEmpty) {
       setState(() {
@@ -175,7 +177,7 @@ class _PersonaDevScreenState extends ConsumerState<_PersonaDevScreen> {
       ref.read(accessSessionProvider.notifier).start(session.token, session.expiresAt);
       ref.read(fakeAuthProvider.notifier).signIn(person);
       if (mounted) context.go('/home');
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) setState(() =>
         error = e is Failure ? e : const UnexpectedFailure());
     } finally {

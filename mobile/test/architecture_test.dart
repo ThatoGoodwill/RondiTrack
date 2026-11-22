@@ -8,6 +8,8 @@ void main() {
         file.path.replaceAll('\\', '/').contains('/presentation/'));
     for (final screen in screens) {
       final contents = screen.readAsStringSync();
+      // This regex intentionally includes both quote characters.
+      // ignore: use_raw_strings
       expect(RegExp("import ['\"][^'\"]*/data/").hasMatch(contents), isFalse,
         reason: screen.path);
       expect(contents.contains('Navigator.push'), isFalse, reason: screen.path);

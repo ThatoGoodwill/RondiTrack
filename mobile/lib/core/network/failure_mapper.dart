@@ -25,7 +25,7 @@ Failure mapFailure(Object error) {
           : [value.toString()];
     }
   }
-  return switch (status) {
+  return switch (status ?? 0) {
     400 => ValidationFailure(detail, fields: fields, reference: reference),
     401 => UnauthorisedFailure(reference: reference),
     403 => ForbiddenFailure(reference: reference),

@@ -29,7 +29,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     try {
       await signInWithApi(ref, _email.text.trim(), _password.text,
         persona: 'authenticated');
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) setState(() => _error = error is Failure
           ? error : const UnexpectedFailure());
     } finally {
