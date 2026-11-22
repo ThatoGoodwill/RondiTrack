@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/client.dart';
 import '../../../core/network/failure_mapper.dart';
+import '../../../core/network/data/wire_models.dart';
 import '../../../core/network/session.dart';
 import '../../../core/auth/auth_state.dart';
 
@@ -14,10 +15,10 @@ class AuthApi {
     try {
       final response = await dio.post<dynamic>('/api/v1/auth/login',
         data: {'email': email, 'password': password});
-      final data = Map<String, dynamic>.from(response.data as Map);
-      return AccessSession(
-        data['accessToken'] as String,
-        DateTime.parse(data['expiresAt'] as String).toUtc());
+      final token = TokenWire.fromJson(
+          Map<String, dynamic>.from(response.data as Map));
+      return AccessSession(token.accessToken,
+          DateTime.parse(token.expiresAt).toUtc());
     } catch (error) {
       throw mapFailure(error);
     }

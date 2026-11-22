@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../core/network/failure_mapper.dart';
+import '../../../core/network/data/wire_models.dart';
 
 class ApiActivityRepository {
   const ApiActivityRepository(this.dio);
@@ -9,9 +10,9 @@ class ApiActivityRepository {
     try {
       final response = await dio.get<dynamic>('/api/v1/activity',
         queryParameters: {'pageSize': 10});
-      final body = Map<String, dynamic>.from(response.data as Map);
-      return (body['items'] as List).map((item) =>
-        Map<String, dynamic>.from(item as Map)['description'] as String).toList();
+      final page = ActivityPageWire.fromJson(
+          Map<String, dynamic>.from(response.data as Map));
+      return page.items.map((item) => item.description).toList(growable: false);
     } catch (error) {
       throw mapFailure(error);
     }

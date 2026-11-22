@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../core/money/cents.dart';
+import '../../../core/network/data/wire_models.dart';
 import '../../../core/network/failure.dart';
 import '../../../core/network/failure_mapper.dart';
 import '../../stokvel/domain/statuses.dart';
@@ -15,10 +16,9 @@ class ApiHomeRepository implements HomeRepository {
   Future<List<HomeEntry>> loadHome(String persona) async {
     try {
       final response = await dio.get<dynamic>('/api/v1/me/home');
-      final body = Map<String, dynamic>.from(response.data as Map);
-      final rows = body['stokvels'] as List;
-      return rows.map((value) => mapHomeEntry(Map<String, dynamic>.from(value as Map)))
-          .toList(growable: false);
+      final wire = HomeWireResponse.fromJson(
+          Map<String, dynamic>.from(response.data as Map));
+      return wire.stokvels.map(mapHomeWire).toList(growable: false);
     } catch (error) {
       throw mapFailure(error);
     }
@@ -42,10 +42,9 @@ class ApiHomeRepository implements HomeRepository {
         '/api/v1/stokvels/${Uri.encodeComponent(stokvelId)}/contributions',
         queryParameters: {'cycleId': cycle.id, 'pageSize': 100},
       );
-      final json = Map<String, dynamic>.from(response.data as Map);
-      final contributions = (json['items'] as List)
-          .map((value) => mapContribution(Map<String, dynamic>.from(value as Map)))
-          .toList(growable: false);
+      final wire = ContributionPageWire.fromJson(
+          Map<String, dynamic>.from(response.data as Map));
+      final contributions = wire.items.map(mapContributionWire).toList(growable: false);
       return StokvelDetails(home: selected, contributions: contributions);
     } catch (error) {
       throw mapFailure(error);
@@ -53,44 +52,42 @@ class ApiHomeRepository implements HomeRepository {
   }
 }
 
-HomeEntry mapHomeEntry(Map<String, dynamic> data) {
-  final cycleData = data['currentCycle'];
-  CurrentCycle? cycle;
-  if (cycleData != null) {
-    final raw = Map<String, dynamic>.from(cycleData as Map);
-    cycle = CurrentCycle(
-      id: raw['id'] as String,
-      label: raw['label'] as String,
-      status: CycleStatus.fromApi(raw['status'] as String),
-      paidCents: Cents((raw['paidCents'] as num).toInt()),
-      owedCents: Cents((raw['owedCents'] as num).toInt()),
-      endsOnDate: raw['endsOn'] as String?,
-    );
-  }
-  final due = data['nextPayoutDueUtc'] as String?;
+HomeEntry mapHomeEntry(Map<String, dynamic> data) =>
+    mapHomeWire(HomeStokvelWire.fromJson(data));
+
+HomeEntry mapHomeWire(HomeStokvelWire data) {
+  final raw = data.currentCycle;
+  final cycle = raw == null ? null : CurrentCycle(
+    id: raw.id,
+    label: raw.label,
+    status: CycleStatus.fromApi(raw.status),
+    paidCents: Cents(raw.paidCents),
+    owedCents: Cents(raw.owedCents),
+    endsOnDate: raw.endsOn,
+  );
+  final due = data.nextPayoutDueUtc;
   return HomeEntry(
     membership: Membership(
-      stokvelId: data['stokvelId'] as String,
-      role: StokvelRole.fromApi(data['role'] as String)),
-    name: data['name'] as String,
-    arrearsCents: Cents((data['arrearsCents'] as num).toInt()),
+      stokvelId: data.stokvelId,
+      role: StokvelRole.fromApi(data.role)),
+    name: data.name,
+    arrearsCents: Cents(data.arrearsCents),
     currentCycle: cycle,
     nextPayoutDueUtc: due == null ? null : DateTime.parse(due).toUtc(),
   );
 }
 
-/// ContributionResponse's amount is decimal *rands*, not integer cents.
-ContributionEntry mapContribution(Map<String, dynamic> data) {
-  final rands = data['amount'] as num;
+ContributionEntry mapContributionWire(ContributionWire data) {
+  final rands = data.amount;
   final cents = (rands * 100).round();
   if ((rands * 100 - cents).abs() > 0.000001) {
     throw const UnexpectedFailure();
   }
   return ContributionEntry(
-    id: data['id'] as String,
-    userId: data['userId'] as String,
+    id: data.id,
+    userId: data.userId,
     amountCents: Cents(cents),
-    recordedAtUtc: DateTime.parse(data['recordedAt'] as String).toUtc(),
+    recordedAtUtc: DateTime.parse(data.recordedAt).toUtc(),
     status: ContributionStatus.recorded,
   );
 }

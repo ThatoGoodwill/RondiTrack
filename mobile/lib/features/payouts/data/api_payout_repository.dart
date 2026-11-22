@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../core/money/cents.dart';
+import '../../../core/network/data/wire_models.dart';
 import '../../../core/network/failure_mapper.dart';
 import '../domain/payout_models.dart';
 import '../domain/payout_repository.dart';
@@ -16,23 +17,21 @@ class ApiPayoutRepository implements PayoutRepository {
         '/api/v1/stokvels/${Uri.encodeComponent(stokvelId)}'
         '/cycles/${Uri.encodeComponent(cycleId)}/payout/order',
       );
-      final json = Map<String, dynamic>.from(response.data as Map);
-      final entries = (json['entries'] as List).map((value) {
-        final row = Map<String, dynamic>.from(value as Map);
-        return PayoutOrderEntry(
-          memberId: row['memberId'] as String,
-          memberName: row['memberName'] as String,
-          position: (row['position'] as num).toInt(),
-          amountCents: Cents((row['amountCents'] as num).toInt()),
-          status: PayoutStatus.fromApi(row['status'] as String),
-          paidOnUtc: row['paidOnUtc'] as String?,
-        );
-      }).toList(growable: false);
+      final wire = PayoutOrderWire.fromJson(
+          Map<String, dynamic>.from(response.data as Map));
       return PayoutOrder(
-        stokvelId: json['stokvelId'] as String,
-        cycleId: json['cycleId'] as String,
-        nextMemberId: json['nextMemberId'] as String?,
-        entries: entries);
+        stokvelId: wire.stokvelId,
+        cycleId: wire.cycleId,
+        nextMemberId: wire.nextMemberId,
+        entries: wire.entries.map((row) => PayoutOrderEntry(
+          memberId: row.memberId,
+          memberName: row.memberName,
+          position: row.position,
+          amountCents: Cents(row.amountCents),
+          status: PayoutStatus.fromApi(row.status),
+          paidOnUtc: row.paidOnUtc,
+        )).toList(growable: false),
+      );
     } catch (error) {
       throw mapFailure(error);
     }
