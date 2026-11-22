@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/network/session.dart';
+import '../../../core/widgets/failure_message.dart';
 import '../../home/presentation/providers.dart';
 
 class ActivityScreen extends ConsumerWidget {
@@ -12,12 +13,8 @@ class ActivityScreen extends ConsumerWidget {
     return Scaffold(appBar: AppBar(title: const Text('Activity')),
       body: activity.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Column(mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(error.toString()),
-            TextButton(onPressed: () => ref.invalidate(activityFeedProvider),
-              child: const Text('Try again')),
-          ])),
+        error: (error, _) => FailureMessage(error: error,
+          retry: () => ref.invalidate(activityFeedProvider)),
         data: (items) => items.isEmpty
           ? const Center(child: Text('No activity yet. Join a stokvel to get started.'))
           : ListView(children: [for (final item in items)

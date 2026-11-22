@@ -4,7 +4,7 @@ import '../../../core/money/cents.dart';
 import '../../../core/layout/breakpoints.dart';
 import 'stokvel_list_screen.dart';
 import '../../../core/routing/routes.dart';
-import '../../home/domain/not_found.dart';
+import '../../../core/widgets/failure_message.dart';
 import '../../home/presentation/providers.dart';
 import '../domain/actions.dart';
 import '../domain/statuses.dart';
@@ -31,12 +31,8 @@ class StokvelDetailsBody extends ConsumerWidget {
     final details = ref.watch(stokvelDetailsProvider(stokvelId));
     return details.when(
       loading: () => const Center(child: CircularProgressIndicator(key: Key('detail-loading'))),
-      error: (e, _) => Center(child: e is StokvelNotFound
-        ? const Text('Not found')
-        : Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Could not load this stokvel'),
-            TextButton(onPressed: () => ref.invalidate(stokvelDetailsProvider(stokvelId)),
-              child: const Text('Try again'))])),
+      error: (e, _) => FailureMessage(error: e,
+        retry: () => ref.invalidate(stokvelDetailsProvider(stokvelId))),
       data: (detail) {
         final entry = detail.home;
         final cycle = entry.currentCycle;
