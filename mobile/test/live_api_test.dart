@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/features/auth/data/auth_api.dart';
 import 'package:ronditrack_mobile/features/home/data/api_home_repository.dart';
 import 'package:ronditrack_mobile/features/home/domain/models.dart';
+import 'package:ronditrack_mobile/features/stokvel/domain/statuses.dart';
 
 const baseUrl = String.fromEnvironment('liveApiBaseUrl');
 const password = String.fromEnvironment('seedPassword');
@@ -48,8 +49,18 @@ void main() {
       '/api/v1/stokvels/00000000-0000-4000-8000-000000000000',
       options: Options(validateStatus: (_) => true));
     expect(stranger.statusCode, 404);
-    // The real 403 test requires a seeded member-only cycle; it is recorded
-    // in the PR separately rather than issuing a real money write blindly.
+    // A Member cannot issue a Treasurer-only payout. Authorization
+    // rejects this before a money operation can begin.
+    final members = siphoHome.where((entry) =>
+      entry.membership.role == StokvelRole.member &&
+      entry.currentCycle != null).toList();
+    expect(members, isNotEmpty);
+    final member = members.first;
+    final forbidden = await siphoDio.post<dynamic>(
+      '/api/v1/stokvels/${member.membership.stokvelId}'
+      '/cycles/${member.currentCycle!.id}/payout',
+      options: Options(validateStatus: (_) => true));
+    expect(forbidden.statusCode, 403);
     expect(leratoHome, isNotEmpty);
   });
 }
