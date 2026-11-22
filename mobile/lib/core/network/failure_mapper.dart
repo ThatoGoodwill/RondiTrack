@@ -1,9 +1,24 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'failure.dart';
 
 /// The only HTTP-to-domain error translation used by repositories.
 Failure mapFailure(Object error) {
   if (error is Failure) return error;
+  // Dart 3 record .wait bundles its separate errors. Preserve a member's 404.
+  if (error is ParallelWaitError) {
+    final errors = error.errors;
+    if (errors case (final left, final right)) {
+      final values = <Object>[if (left != null) left, if (right != null) right];
+      final failures = values.map((item) => mapFailure(
+        item is AsyncError ? item.error : item)).toList();
+      for (final failure in failures) {
+        if (failure is NotFoundFailure) return failure;
+      }
+      if (failures.isNotEmpty) return failures.first;
+    }
+    return const UnexpectedFailure();
+  }
   if (error is! DioException) return const UnexpectedFailure();
 
   final response = error.response;

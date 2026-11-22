@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ronditrack_mobile/core/network/failure.dart';
@@ -26,6 +27,17 @@ void main() {
       isA<ServerFailure>());
     expect(mapFailure(DioException(requestOptions: RequestOptions(path: '/')),
       ), isA<OfflineFailure>());
+  });
+  test('404 inside Dart record ParallelWaitError stays not found', () async {
+    try {
+      await (
+        Future<int>.error(responseError(404)),
+        Future<int>.value(1),
+      ).wait;
+      fail('Expected the record wait to throw');
+    } on ParallelWaitError catch (error) {
+      expect(mapFailure(error), isA<NotFoundFailure>());
+    }
   });
   test('rate-limit uses server Retry-After, not a fixed duration', () {
     final failure = mapFailure(responseError(429, headers: {'retry-after': ['37']}));
