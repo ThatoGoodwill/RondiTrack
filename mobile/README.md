@@ -1,3 +1,12 @@
+# RondiTrack Mobile — latest work: Assignment 11.1
+
+The real-data work and seven verified API contract answers are documented in
+[ASSIGNMENT_11_1_IMPLEMENTATION.md](ASSIGNMENT_11_1_IMPLEMENTATION.md).
+The Week 10 sections below are preserved as historical implementation notes and
+may describe earlier fake-data behavior; do not use them as the current API spec.
+
+---
+
 # RondiTrack Mobile — Assignment 10.1 (DRAFT)
 
 **This is the Week 10 Flutter app source, staged under `mobile/` in the API repository because a separate app repository was not available in the connected GitHub account.** The assignment requires moving the contents of this folder to the ROOT of a separate `RondiTrack-Mobile` repository. It is not a deployment of Assignment 9.3.

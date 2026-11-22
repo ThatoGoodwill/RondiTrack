@@ -45,10 +45,14 @@ String safeRequestLine(RequestOptions options, int? status, String? reference) {
       : 0;
   final method = options.method.replaceAll(RegExp('[^A-Z]'), '');
   // Route path segments can be patient or membership identifiers: redact them.
+  const safeSegments = {
+    'api', 'v1', 'auth', 'login', 'me', 'home', 'stokvels',
+    'cycles', 'contributions', 'payout', 'order', 'activity',
+    'members', 'payouts', 'refresh', 'logout',
+  };
   final path = options.uri.pathSegments.map((part) {
     if (part.isEmpty) return '';
-    if (RegExp(r'^[0-9a-fA-F-]{32,36}$').hasMatch(part)) return ':id';
-    return part;
+    return safeSegments.contains(part) ? part : ':value';
   }).join('/');
   final safeRef = reference == null ? '-' :
       reference.replaceAll(RegExp(r'[^a-zA-Z0-9-]'), '');
