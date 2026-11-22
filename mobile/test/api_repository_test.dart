@@ -65,13 +65,13 @@ void main() {
   });
 
   test('non-member detail is Not found without reading contributions', () async {
-    final repository = ApiHomeRepository(stubDio({'/api/v1/me/home': {'stokvels': []}}));
+    final repository = ApiHomeRepository(stubDio({'/api/v1/me/home': {'stokvels': <Map<String, dynamic>>[]}}));
     await expectLater(repository.loadDetail('persona', 'inaccessible'),
       throwsA(isA<NotFoundFailure>()));
   });
 
   test('detail translates API decimal rands into integer cents', () async {
-    final id = '11111111-1111-4111-8111-111111111111';
+    const id = '11111111-1111-4111-8111-111111111111';
     final repository = ApiHomeRepository(stubDio({
       '/api/v1/me/home': homeJson,
       '/api/v1/stokvels/$id/contributions': {
